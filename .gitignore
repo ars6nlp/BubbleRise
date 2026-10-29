@@ -1,0 +1,107 @@
+# ---------------------------------------------------------------- Unity
+# Всё это Unity генерирует сам из Assets и ProjectSettings. В репозитории
+# оно только раздувает историю и постоянно конфликтует при слиянии.
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Bb]uild/
+/[Bb]uilds/
+/[Ll]ogs/
+/[Uu]ser[Ss]ettings/
+/[Mm]emoryCaptures/
+/[Rr]ecordings/
+
+# Импортированные пакеты и ассеты
+/[Aa]ssets/AssetStoreTools*
+/[Aa]ssets/Plugins/Editor/JetBrains*
+
+# ------------------------------------------------------------ среды разработки
+.vs/
+.vscode/
+.idea/
+.vsconfig
+*.csproj
+*.unityproj
+*.sln
+*.suo
+*.tmp
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+
+# ------------------------------------------------------------------ подпись
+# Ключ подписи Android в репозитории не место ни при каких условиях: утёкший
+# ключ нельзя отозвать, а потерянный означает, что обновить приложение в Google
+# Play больше нечем — только публиковать заново под другим именем.
+*.keystore
+*.jks
+keystore.properties
+
+# ------------------------------------------------------------------ сборки
+*.apk
+*.aab
+
+# Побочные папки сборки Android. Unity кладёт их рядом с пакетом и сама пишет в
+# имени, что отгружать их не надо: внутри исходники IL2CPP и отладочные символы —
+# сотни мегабайт сгенерированного C++, который восстанавливается любой сборкой.
+*_BackUpThisFolder_ButDontShipItWithYourGame/
+*_BurstDebugInformation_DoNotShip/
+*.unitypackage
+*.app
+*.zip
+
+# ------------------------------------------------------------------- прочее
+sysinfo.txt
+crashlytics-build.properties
+.DS_Store
+Thumbs.db
+
+# Временные файлы сборочного бэкенда Unity
+.utmp/
+
+# Картинки предпросмотра: это вывод Tools/preview_*.py, а не исходник
+Tools/preview_*.png
+Tools/out/
+Tools/__pycache__/
+
+# ------------------------------------------------- публичный репозиторий
+# Всё, что ниже, добавлено при подготовке открытого зеркала.
+
+# SDK рекламы: это чужой код, он ставится из Package Manager и тащит за собой
+# идентификатор приложения AdMob в своих настройках. Ставится заново по
+# docs/BUILD.md.
+Assets/GoogleMobileAds/
+Assets/GoogleMobileAds.meta
+Assets/Plugins/Android/GoogleMobileAdsPlugin.androidlib/
+Assets/Plugins/Android/GoogleMobileAdsPlugin.androidlib.meta
+Assets/Plugins/Android/googlemobileads-unity.aar
+Assets/Plugins/Android/googlemobileads-unity.aar.meta
+Assets/Plugins/iOS/
+Assets/Plugins/iOS.meta
+
+# Боевые рекламные блоки. Шаблон: BuildSetup/AdUnits.Example.cs
+Assets/Scripts/AdUnits.cs
+Assets/Scripts/AdUnits.cs.meta
+
+# Локальные и служебные файлы
+.claude/
+.idea/
+.vscode/
+local.properties
+keystore.properties
+google-services.json
+GoogleService-Info.plist
+*.p12
+*.pem
+*.env
+.env*
+*_mapping.txt
+*.symbols.zip
+__pycache__/
+*.pyc
