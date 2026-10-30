@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Свой главный манифест нужен по двум причинам.
+
+    Первая — разрешения. Раньше здесь стояла строка, снимавшая INTERNET: игре сеть
+    была не нужна, а в карточке приложения оно показывалось как «полный доступ к
+    сети» и противоречило обещанию ничего не собирать. С появлением рекламы сеть
+    нужна по-настоящему, поэтому отказ снят: AdMob без неё молча не загружает
+    объявления, и причину искали бы долго — в логах это выглядит как «нет
+    заполнения», а не как отсутствующее разрешение.
+
+    Разрешение AD_ID объявлено явно. Библиотека рекламы добавляет его и сама, но
+    когда оно записано здесь, видно, что оно осознанное: именно его мы подтверждаем
+    в декларации «Рекламный идентификатор» в Play Console.
+
+    Вторая причина — единственная точка входа. Шаблон Unity
+    (PlaybackEngines/AndroidPlayer/Apk/UnityManifest.xml) содержит два блока Activity,
+    и если оставить оба, игра появится в списке приложений двумя иконками. Здесь
+    оставлена только та, которой пользуется проект: Application Entry = GameActivity.
+
+    Остальные атрибуты (configChanges, аппаратное ускорение, ориентация) Unity
+    подмешивает сюда сама при сборке, поэтому их тут нет.
+-->
+<manifest
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!--
+        Вибрация. Haptics зовёт vibrator.vibrate(long[], -1), а без этого
+        разрешения Android бросает SecurityException; Haptics его глотает и
+        выключает вибрацию насовсем. Unity добавляет разрешение сам только при
+        Handheld.Vibrate, а он в проекте не вызывается — в собранном .aab
+        VIBRATE не было, и вибрации на Android не было вообще (I-01).
+    -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="com.google.android.gms.permission.AD_ID" />
+
+    <application>
+        <!--
+            Идентификатор приложения AdMob. Без него игра не запускается вовсе:
+            библиотека рекламы регистрирует собственный MobileAdsInitProvider,
+            он стартует раньше всего нашего кода, не находит эту строку и бросает
+            исключение — пользователь видит заставку и вылет, одинаково на всех
+            устройствах.
+
+            Здесь стоит ТЕСТОВЫЙ идентификатор Google: боевой принадлежит
+            конкретному аккаунту AdMob и в репозиторий не входит. Свой
+            впишите сюда и в GoogleMobileAdsSettings — см. docs/BUILD.md.
+
+            Строку должен вписывать сюда сам плагин при сборке (ManifestProcessor),
+            но в сборке версии 2 он не отработал молча: ни записи в манифесте
+            библиотеки, ни его сообщения в логе. Поэтому идентификатор стоит здесь,
+            в манифесте, который принадлежит проекту, а не плагину, и переживает
+            его переустановку. Значение то же самое, что в
+            GoogleMobileAds/Resources/GoogleMobileAdsSettings.asset — если плагин
+            однажды отработает, он впишет ровно это, и склейка манифестов пройдёт
+            без конфликта.
+        -->
+        <meta-data android:name="com.google.android.gms.ads.APPLICATION_ID"
+                   android:value="ca-app-pub-3940256099942544~3347511713" />
+
+        <activity android:name="com.unity3d.player.UnityPlayerGameActivity"
+                  android:theme="@style/BaseUnityGameActivityTheme">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <meta-data android:name="unityplayer.UnityActivity" android:value="true" />
+            <meta-data android:name="android.app.lib_name" android:value="game" />
+        </activity>
+    </application>
+</manifest>

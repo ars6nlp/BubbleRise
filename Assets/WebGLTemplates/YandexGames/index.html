@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1.0, user-scalable=no, shrink-to-fit=yes">
+  <title>{{{ PRODUCT_NAME }}}</title>
+  <style>
+    html, body {
+      margin:0; padding:0; width:100%; height:100%; overflow:hidden; background:#081522;
+      -webkit-user-select:none; user-select:none;
+      -webkit-touch-callout:none;   /* iOS: выноска по долгому тапу */
+      -webkit-tap-highlight-color:transparent;
+    }
+    #unity-canvas { width:100%; height:100%; display:block; background:#081522; touch-action:none; }
+    #loader {
+      position:fixed; inset:0; display:flex; flex-direction:column;
+      align-items:center; justify-content:center;
+      background:#081522; color:#EAF6F2;
+      font-family:'Segoe UI', Tahoma, sans-serif; z-index:10;
+    }
+    #loader .name { font-size:28px; font-weight:700; color:#5BE9D1; margin-bottom:18px; letter-spacing:0.5px; }
+    #loader .track { width:min(260px, 60vw); height:8px; border-radius:999px; background:rgba(91,233,209,0.18); overflow:hidden; }
+    #loader .bar { height:100%; width:0%; background:#5BE9D1; transition:width 0.15s ease; }
+  </style>
+</head>
+<body>
+  <canvas id="unity-canvas" tabindex="-1"></canvas>
+
+  <div id="loader">
+    <!-- Название обязано совпадать с полем «Название» в консоли Яндекс Игр
+         и с заголовком в меню игры (п. 5.1.3 требований платформы). -->
+    <div class="name" id="loader-name">Пузырёк: Подъём из глубин</div>
+    <div class="track"><div class="bar" id="loader-bar"></div></div>
+  </div>
+
+  <script>
+    // Экран загрузки рисуется до старта Unity и до готовности SDK, поэтому язык
+    // берём из адреса: Яндекс открывает игру с ?lang=<код>. Название на английском
+    // должно совпадать с полем Title английского раздела консоли (п. 5.1.3).
+    (function () {
+      var lang = '';
+      try {
+        lang = new URLSearchParams(location.search).get('lang') || navigator.language || '';
+      } catch (e) { lang = ''; }
+      if (lang.slice(0, 2).toLowerCase() !== 'ru') {
+        document.documentElement.lang = 'en';
+        var el = document.getElementById('loader-name');
+        if (el) el.textContent = 'Bubble Rise: Ascent from the Depths';
+      }
+    })();
+  </script>
+
+  <!-- Yandex Games SDK. Грузится до Unity, чтобы ysdk был готов к моменту старта игры. -->
+  <script src="https://yandex.ru/games/sdk/v2"></script>
+
+  <script>
+    // ------------------------------------------------------------------
+    // Мост между игрой и Yandex Games SDK.
+    // Из Unity сюда приходят вызовы через Assets/Plugins/WebGL/YandexSdk.jslib,
+    // обратно — через unityInstance.SendMessage('YandexSdkManager', ...).
+    // ------------------------------------------------------------------
+    (function () {
+      var UNITY_OBJECT = 'YandexSdkManager';
+
+      var ysdk = null;
+      var player = null;
+      var leaderboards = null;
+      var ready = false;
+      var gameReadySent = false;
+      var gameReadyPending = false;
+      // Отсчёт ведём от загрузки, а не от нуля: иначе первый же вызов прошёл бы
+      // сразу после старта, а показывать рекламу в начале сессии площадка запрещает.
+      var lastInterstitialAt = Date.now();
+      var MIN_INTERSTITIAL_GAP_MS = 60000; // Яндекс рекомендует не чаще раза в минуту
+
+      function fireGameReady() {
+        if (gameReadySent) return;
+        gameReadySent = true;
+        gameReadyPending = false;
+        try {
+          if (ysdk && ysdk.features && ysdk.features.LoadingAPI) ysdk.features.LoadingAPI.ready();
+        } catch (e) { console.warn('[YSDK] LoadingAPI.ready', e); }
+      }
+
+      // Очередь сообщений в игру.
+      //
+      // SDK отвечает за доли секунды, а window.unityInstance появляется только когда
+      // резолвится createUnityInstance — то есть через несколько секунд, после полной
+      // загрузки движка. Всё, что SDK успевает прислать в это окно, раньше молча
+      // выбрасывалось: язык площадки, облачное сохранение и сам факт готовности SDK
+      // до игры не доезжали.
+      //
+      // Обратное направление, из игры в SDK, идёт через jslib и работает всегда —
+      // поэтому в логах всё выглядело исправным, а терялась ровно половина обмена.
+      var pendingMessages = [];
+
+      function send(method, value) {
+        var payload = String(value === undefined ? '' : value);
+
+        if (!window.unityInstance) {
+          pendingMessages.push([method, payload]);
+          return;
+        }
+
+        // Доставляем следующим тиком, а не сразу. Часть ответов SDK рождается
+        // внутри вызова из самой игры: requestLang дёргает C#, SDK отвечает
+        // синхронно, и SendMessage вошёл бы в Unity посреди её собственного кадра.
+        // setTimeout разрывает эту реентерантность; порядок сообщений сохраняется,
+        // потому что таймеры с нулевой задержкой выполняются в порядке постановки.
+        setTimeout(function () {
+          try {
+            window.unityInstance.SendMessage(UNITY_OBJECT, method, payload);
+          } catch (e) {
+            console.warn('[YSDK] SendMessage', method, e);
+          }
+        }, 0);
+      }
+
+      function flushPending() {
+        if (!pendingMessages.length) return;
+
+        var queue = pendingMessages;
+        pendingMessages = [];
+        console.log('[YSDK] досылаю в игру отложенные сообщения:',
+                    queue.map(function (m) { return m[0]; }).join(', '));
+
+        for (var i = 0; i < queue.length; i++) send(queue[i][0], queue[i][1]);
+      }
+
+      // ------------------------------------------------------------------
+      // Пауза и звук.
+      //
+      // Требование площадки: пока показывается реклама или пока вкладка скрыта,
+      // игра стоит на паузе и молчит. Проверяют это руками, поэтому делаем обе
+      // вещи и с двух сторон:
+      //   * Unity ставится на паузу через SendMessage — вызов идёт в рантайм
+      //     напрямую и срабатывает даже когда requestAnimationFrame остановлен;
+      //   * WebAudio-контекст глушится здесь же, в JS. Это страховка: контекст
+      //     живёт вне игрового цикла и продолжил бы крутить зацикленную музыку.
+      //
+      // Причин для паузы две, и они независимы, поэтому держим их флагами:
+      // закрытие рекламы не должно снимать паузу, если вкладка всё ещё скрыта.
+      // ------------------------------------------------------------------
+      var pauseFlags = { ad: false, page: false };
+      var isPaused = false;
+
+      // Идёт ли партия по мнению игры. GameplayAPI требует, чтобы stop() звучал на
+      // каждое прерывание — рекламу, скрытую вкладку, — а start() возвращался ровно
+      // тогда, когда игрок снова играет. Флаг нужен, чтобы после ролика не «начать»
+      // геймплей, которого нет: рекламу мы показываем на экране поражения.
+      var gameplayActive = false;
+
+      function gameplayApi(method) {
+        try {
+          if (ysdk && ysdk.features && ysdk.features.GameplayAPI) ysdk.features.GameplayAPI[method]();
+        } catch (e) { /* не критично */ }
+      }
+
+      function audioContext() {
+        try {
+          var m = window.unityInstance && window.unityInstance.Module;
+          return (m && m.WEBAudio && m.WEBAudio.audioContext) || null;
+        } catch (e) { return null; }
+      }
+
+      function applyPause() {
+        var paused = pauseFlags.ad || pauseFlags.page;
+        if (paused === isPaused) return;
+        isPaused = paused;
+
+        send(paused ? 'OnPlatformPause' : 'OnPlatformResume', '');
+
+        // Партия прервана или продолжена — площадка должна знать об этом отдельно
+        // от паузы движка.
+        if (gameplayActive) gameplayApi(paused ? 'stop' : 'start');
+
+        var ctx = audioContext();
+        if (!ctx) return;
+        try {
+          if (paused) { if (ctx.state === 'running') ctx.suspend(); }
+          else if (ctx.state === 'suspended') { ctx.resume(); }
+        } catch (e) { /* нет контекста — ограничимся паузой на стороне Unity */ }
+      }
+
+      // Пауза от рекламы снимается колбэком SDK. Если колбэк почему-то не придёт,
+      // игра осталась бы замороженной навсегда — это хуже любой рекламы, поэтому
+      // держим сторожевой таймер. Срок заведомо больше самого длинного ролика:
+      // сработать он должен только в патологическом случае.
+      var AD_PAUSE_WATCHDOG_MS = 180000;
+      var adWatchdog = null;
+
+      function setPause(reason, value) {
+        pauseFlags[reason] = value;
+
+        if (reason === 'ad') {
+          if (adWatchdog) { clearTimeout(adWatchdog); adWatchdog = null; }
+          if (value) {
+            adWatchdog = setTimeout(function () {
+              console.warn('[YSDK] реклама не вернула колбэк — снимаю паузу принудительно');
+              adWatchdog = null;
+              pauseFlags.ad = false;
+              applyPause();
+            }, AD_PAUSE_WATCHDOG_MS);
+          }
+        }
+
+        applyPause();
+      }
+
+      document.addEventListener('visibilitychange', function () {
+        setPause('page', document.hidden);
+      });
+
+      // Контекстное меню в игровой области запрещено требованиями площадки:
+      // правый клик по канвасу и долгий тап на телефоне не должны открывать
+      // системное меню поверх игры.
+      document.addEventListener('contextmenu', function (e) {
+        e.preventDefault();
+      }, { passive: false });
+
+      window.BubbleRiseYSDK = {
+        isReady: function () { return ready; },
+
+        // Игра зовёт этот метод, когда стартовый экран уже показан и кликабелен.
+        // Unity может успеть загрузиться раньше, чем разрешится YaGames.init(),
+        // и тогда ysdk ещё null. Молча потерять вызов нельзя: без LoadingAPI.ready()
+        // площадка держит свой прелоадер вечно, и это гарантированный отказ.
+        // Поэтому запоминаем намерение и досылаем его после инициализации.
+        gameReady: function () {
+          if (gameReadySent) return;
+          if (!ysdk) { gameReadyPending = true; return; }
+          fireGameReady();
+        },
+
+        // Досылает всё, что SDK успел ответить, пока Unity грузился.
+        flushPending: function () { flushPending(); },
+
+        // Пересказать игре текущее состояние паузы — на случай, если она
+        // загрузилась уже при скрытой вкладке.
+        syncPause: function () {
+          if (isPaused) send('OnPlatformPause', '');
+        },
+
+        gameplayStart: function () {
+          gameplayActive = true;
+          if (!isPaused) gameplayApi('start');
+        },
+
+        gameplayStop: function () {
+          gameplayActive = false;
+          gameplayApi('stop');
+        },
+
+        showInterstitial: function () {
+          var now = Date.now();
+          if (!ysdk || !ysdk.adv || now - lastInterstitialAt < MIN_INTERSTITIAL_GAP_MS) {
+            send('OnInterstitialClosed', '');
+            return;
+          }
+          lastInterstitialAt = now;
+          try {
+            ysdk.adv.showFullscreenAdv({
+              callbacks: {
+                onOpen: function () { setPause('ad', true); },
+                onClose: function () {
+                  setPause('ad', false);
+                  send('OnInterstitialClosed', '');
+                },
+                onError: function (err) {
+                  setPause('ad', false);
+                  send('OnSdkError', 'interstitial: ' + err);
+                  send('OnInterstitialClosed', '');
+                }
+              }
+            });
+          } catch (e) {
+            setPause('ad', false);
+            send('OnInterstitialClosed', '');
+          }
+        },
+
+        showRewarded: function () {
+          if (!ysdk || !ysdk.adv) { send('OnRewardedClosed', ''); return; }
+          try {
+            ysdk.adv.showRewardedVideo({
+              callbacks: {
+                onOpen: function () { setPause('ad', true); },
+                onRewarded: function () { send('OnRewarded', ''); },
+                onClose: function () {
+                  setPause('ad', false);
+                  send('OnRewardedClosed', '');
+                },
+                onError: function (err) {
+                  setPause('ad', false);
+                  send('OnSdkError', 'rewarded: ' + err);
+                  send('OnRewardedClosed', '');
+                }
+              }
+            });
+          } catch (e) {
+            setPause('ad', false);
+            send('OnRewardedClosed', '');
+          }
+        },
+
+        // Язык интерфейса площадки. Яндекс требует, чтобы игра из списка языков
+        // действительно открывалась на этом языке, поэтому берём его у SDK,
+        // а не гадаем по локали браузера.
+        requestLang: function () {
+          var lang = '';
+          var from = '';
+
+          // 1. Главный и единственный правильный источник. Именно его проверяет
+          //    модерация, открывая игру с ?lang=<код>.
+          try {
+            if (ysdk && ysdk.environment && ysdk.environment.i18n) {
+              lang = ysdk.environment.i18n.lang || '';
+              if (lang) from = 'i18n';
+            }
+          } catch (e) { /* язык не критичен: игра останется на текущем */ }
+
+          // 2. Параметр адреса. Площадка прокидывает его и в сам фрейм игры,
+          //    так что это честный запасной путь, а не догадка.
+          if (!lang) {
+            try {
+              lang = new URLSearchParams(location.search).get('lang') || '';
+              if (lang) from = 'url';
+            } catch (e) { lang = ''; }
+          }
+
+          // 3. Язык браузера — только если не сработало ничего выше. Раньше он стоял
+          //    сразу вторым и мог перебить площадку: у проверяющего браузер русский,
+          //    а игра открыта с lang=en.
+          if (!lang) {
+            try {
+              lang = (navigator.language || '').slice(0, 2);
+              if (lang) from = 'navigator';
+            } catch (e) { lang = ''; }
+          }
+
+          console.log('[YSDK] язык площадки:', lang || '(не определён)', 'источник:', from || '—');
+          send('OnLanguage', lang);
+        },
+
+        // Баннер (RTB). Показываем только на экранах вне партии — в геймплее он
+        // перекрывал бы поле, по которому игрок таскает стража, а это верный отказ
+        // модерации и просто плохая игра. Ошибки глушим: баннера может не быть
+        // в регионе или его может резать блокировщик, для игры это не событие.
+        showBanner: function () {
+          if (!ysdk || !ysdk.adv) return;
+          try {
+            ysdk.adv.getBannerAdvStatus().then(function (data) {
+              if (data && data.stickyAdvIsShowing) return;
+              var shown = ysdk.adv.showBannerAdv();
+              if (shown && shown.catch) shown.catch(function () { });
+            }).catch(function () { });
+          } catch (e) { /* баннер не критичен */ }
+        },
+
+        hideBanner: function () {
+          if (!ysdk || !ysdk.adv) return;
+          try {
+            var hidden = ysdk.adv.hideBannerAdv();
+            if (hidden && hidden.catch) hidden.catch(function () { });
+          } catch (e) { /* баннер не критичен */ }
+        },
+
+        // Прогресс и настройки едут одним объектом: площадка требует, чтобы между
+        // сессиями переживало и то, и другое, а один setData дешевле пяти.
+        saveState: function (json) {
+          if (!player) return;
+          try {
+            var saving = player.setData({ state: json }, true);
+            if (saving && saving.catch) saving.catch(function (e) { send('OnSdkError', 'setData: ' + e); });
+          } catch (e) { send('OnSdkError', 'setData: ' + e); }
+        },
+
+        loadState: function () {
+          if (!player) { send('OnStateLoaded', ''); return; }
+          try {
+            player.getData(['state']).then(function (data) {
+              send('OnStateLoaded', (data && data.state) ? data.state : '');
+            }).catch(function () { send('OnStateLoaded', ''); });
+          } catch (e) {
+            send('OnStateLoaded', '');
+          }
+        },
+
+        submitScore: function (board, value) {
+          if (!leaderboards) return;
+          try {
+            // У неавторизованного игрока метод отклоняется — это штатный
+            // сценарий, а не ошибка игры, поэтому гасим отказ здесь же.
+            var sending = leaderboards.setLeaderboardScore(board, value);
+            if (sending && sending.catch) sending.catch(function () { });
+          } catch (e) {
+            send('OnSdkError', 'leaderboard: ' + e);
+          }
+        }
+      };
+
+      // ---------------- инициализация SDK
+      if (typeof YaGames !== 'undefined') {
+        YaGames.init().then(function (sdk) {
+          ysdk = sdk;
+          window.ysdk = sdk;
+
+          var jobs = [];
+
+          jobs.push(sdk.getPlayer({ scopes: false })
+            .then(function (p) { player = p; })
+            .catch(function () { player = null; }));
+
+          jobs.push(sdk.getLeaderboards()
+            .then(function (lb) { leaderboards = lb; })
+            .catch(function () { leaderboards = null; }));
+
+          return Promise.all(jobs);
+        }).then(function () {
+          ready = true;
+          send('OnSdkReady', '');
+          if (gameReadyPending) fireGameReady();
+        }).catch(function (err) {
+          console.warn('[YSDK] init failed', err);
+          send('OnSdkError', 'init: ' + err);
+        });
+      } else {
+        console.warn('[YSDK] SDK не загрузился — игра работает в автономном режиме.');
+      }
+    })();
+  </script>
+
+  <script src="Build/{{{ LOADER_FILENAME }}}"></script>
+  <script>
+    var canvas = document.querySelector('#unity-canvas');
+    var loader = document.getElementById('loader');
+    var loaderBar = document.getElementById('loader-bar');
+
+    createUnityInstance(canvas, {
+      arguments: [],
+      dataUrl: "Build/{{{ DATA_FILENAME }}}",
+      frameworkUrl: "Build/{{{ FRAMEWORK_FILENAME }}}",
+#if USE_THREADS
+      workerUrl: "Build/{{{ WORKER_FILENAME }}}",
+#endif
+#if USE_WASM
+      codeUrl: "Build/{{{ CODE_FILENAME }}}",
+#endif
+#if SYMBOLS_FILENAME
+      symbolsUrl: "Build/{{{ SYMBOLS_FILENAME }}}",
+#endif
+      streamingAssetsUrl: "StreamingAssets",
+      companyName: {{{ JSON.stringify(COMPANY_NAME) }}},
+      productName: {{{ JSON.stringify(PRODUCT_NAME) }}},
+      productVersion: {{{ JSON.stringify(PRODUCT_VERSION) }}},
+      matchWebGLToCanvasSize: true
+    }, function (progress) {
+      loaderBar.style.width = (progress * 100) + '%';
+    }).then(function (unityInstance) {
+      window.unityInstance = unityInstance;
+      loader.style.display = 'none';
+
+      // Порядок важен: сначала доставляем накопленное (готовность SDK, язык,
+      // сохранение), потом текущее состояние паузы.
+      try { window.BubbleRiseYSDK.flushPending(); } catch (e) { /* не критично */ }
+      try { window.BubbleRiseYSDK.syncPause(); } catch (e) { /* не критично */ }
+    }).catch(function (message) {
+      var failed = document.documentElement.lang === 'en'
+        ? 'Failed to load the game' : 'Не удалось загрузить игру';
+      loader.innerHTML = '<div class="name">' + failed + '</div>';
+      console.error(message);
+    });
+  </script>
+</body>
+</html>
