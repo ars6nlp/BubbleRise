@@ -1,6 +1,12 @@
-<h1 align="center">Bubble Rise: Ascent<br><sub>Пузырёк: Подъём из глубин</sub></h1>
+<div align="center">
 
-<p align="center">
+<img src="Assets/Icons/AppIcon.png" width="132" alt="Bubble Rise: Ascent">
+
+# Bubble Rise: Ascent
+
+**Пузырёк: Подъём из глубин**
+
+<p>
   <img src="https://img.shields.io/badge/Unity-6000.2.13f1-black?style=for-the-badge&logo=unity" alt="Unity 6">
   <img src="https://img.shields.io/badge/Platform-Android%20%7C%20WebGL-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Platform">
   <img src="https://img.shields.io/badge/Render-URP%202D-informational?style=for-the-badge" alt="URP 2D">
@@ -9,14 +15,69 @@
   <img src="https://img.shields.io/badge/License-MIT%20(code)-lightgrey?style=for-the-badge" alt="License">
 </p>
 
-<p align="center">
-  <b>A fragile bubble rises on its own. You are not the bubble — you are what stands in the way.</b><br>
-  <i>Хрупкий пузырёк всплывает сам. Вы не пузырёк — вы то, что встаёт на пути.</i>
-</p>
+**A fragile bubble rises on its own. You are not the bubble — you are what stands in the way.**
 
-<p align="center">
-  <a href="#english"><b>English</b></a> · <a href="#русский"><b>Русский</b></a>
-</p>
+*Хрупкий пузырёк всплывает сам. Вы не пузырёк — вы то, что встаёт на пути.*
+
+<a href="https://play.google.com/store/apps/details?id=com.bubblerise.ascent">
+  <img src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png" alt="Get it on Google Play" height="64">
+</a>
+
+**[English](#english)** · **[Русский](#русский)** · [Build](docs/BUILD.md) · [Design notes](docs/DESIGN.md)
+
+</div>
+
+---
+
+## Not one art file · Ни одного файла с графикой
+
+Every pixel below was produced by the C# that ships in this repository. There are no PNGs of
+enemies, skins or icons anywhere in the build — just functions of position, angle and time.
+The sheets here are rendered by the Python ports in `Tools/`, which reproduce the same maths
+outside Unity, and **every one of them regenerates with a single command.**
+
+*Каждый пиксель ниже нарисован тем кодом на C#, который лежит в этом репозитории. Ни одного
+PNG с врагами, скинами или значками в сборке нет — только функции от точки, угла и времени.
+Листы здесь рисуют порты на Python из `Tools/`, повторяющие ту же математику вне Unity, и
+**любой из них перерисовывается одной командой.***
+
+<table>
+<tr><td align="center">
+  <img src="docs/images/shapes.png" width="700" alt="Nine bubble and guardian shapes">
+  <br><b>Shapes</b> · <b>Формы</b>
+  <br><sub>Sphere, Drop, Faceted, Spiky, Ringed, Wisp, Lumpy, Star, Blocky — each silhouette is a radius function of the angle<br>
+  Девять силуэтов пузырька и стража: каждый — функция радиуса от угла, а не файл</sub>
+  <br><sub><code>python3 Tools/preview_shapes.py</code></sub>
+</td></tr>
+<tr><td align="center">
+  <img src="docs/images/materials.png" width="860" alt="Fifteen skin materials">
+  <br><b>Materials</b> · <b>Материалы</b>
+  <br><sub>coral · pearl · sand · tide · neon · resin · plasma · pixel · aurora · abyss · verdigris · cinnabar · obsidian · brass · starlight<br>
+  Скин — это форма плюс материал, поэтому их много, а весят они ноль байт</sub>
+  <br><sub><code>python3 Tools/preview_materials.py</code></sub>
+</td></tr>
+<tr><td align="center">
+  <img src="docs/images/rewards.png" width="760" alt="Reward and interface icons">
+  <br><b>Rewards</b> · <b>Награды</b>
+  <br><sub>Chest, wheel, pointer, three medals, gift, sparkle, tick, flame — the interface is drawn by the same factory as the enemies<br>
+  Сундук, колесо, медали, подарок — интерфейс рисует та же фабрика, что и врагов</sub>
+  <br><sub><code>python3 Tools/preview_rewards.py</code></sub>
+</td></tr>
+<tr><td align="center">
+  <img src="docs/images/hazards.png" width="300" alt="Six kinds of obstacle">
+  <br><b>Hazards</b> · <b>Препятствия</b>
+  <br><sub>Stone, urchin, growth, ember, coral, mine. The generator reseeds for every one, so two stones never match<br>
+  Камень, ёж, нарост, уголёк, коралл, мина — генератор берёт новое зерно, одинаковых не бывает</sub>
+  <br><sub><code>python3 Tools/preview_hazards.py</code></sub>
+</td></tr>
+<tr><td align="center">
+  <img src="docs/images/envelopes.png" width="620" alt="Sixteen collision envelopes">
+  <br><b>Collision envelopes</b> · <b>Оболочки столкновения</b>
+  <br><sub>The debug sheet: sixteen envelopes of legendary and boss skins, one frame each at <i>t</i> = 0.9 s, with reach, period and particle count<br>
+  Отладочный лист: шестнадцать оболочек легендарных и боссовых скинов — ровно то, что игра рисует вокруг стража</sub>
+  <br><sub><code>python3 Tools/preview_envelopes.py</code></sub>
+</td></tr>
+</table>
 
 ---
 
@@ -108,6 +169,7 @@ measures them and fails the build if they are broken.
 | `Tools/` | 18 Python tools: checks, previews, simulations, builds |
 | `BuildSetup/` | `AdUnits.Example.cs` — template for ad unit ids |
 | `docs/` | design notes, build instructions, privacy policy |
+| `docs/images/` | the sheets above, as produced by `Tools/preview_*.py` |
 
 ### Build
 
@@ -126,11 +188,12 @@ Full instructions: **[docs/BUILD.md](docs/BUILD.md)**. In short:
 |---|---|
 | `python3 Tools/check.py` | compiles both script assemblies with the Roslyn bundle shipped inside Unity, plus `node --check` on the WebGL template |
 | `python3 Tools/audit.py` | ~300 publication-readiness checks: localisation, economy, layout, effects, eye-safety limits |
-| `python3 Tools/preview_*.py` | renders the sprite maths to PNG with the same code the game uses |
+| `python3 Tools/preview_*.py` | renders the sprite maths to PNG with the same code the game uses — this is where the sheets above come from |
 | `python3 Tools/simulate_*.py` | replays the reward economy and the obstacle generator from the config numbers |
 
 Both return a non-zero exit code on failure and are fit for CI. They do not replace playing
-the game, but they catch regressions in seconds without opening the editor.
+the game, but they catch regressions in seconds without opening the editor. The previews need
+[Pillow](https://pypi.org/project/Pillow/); nothing else has dependencies outside the standard library.
 
 ### License
 
@@ -139,6 +202,7 @@ the game, but they catch regressions in seconds without opening the editor.
 | Code — C#, editor tools, Python in `Tools/` | [MIT](LICENSE) |
 | Inter font (`Assets/Resources/`) | [SIL Open Font License 1.1](https://scripts.sil.org/OFL) — its own licence, not MIT |
 | App icons (`Assets/Icons/`), site page (`docs/site/`) | **all rights reserved**, not covered by MIT |
+| Preview sheets (`docs/images/`) | output of the MIT tools in `Tools/`, so MIT covers them too |
 | Everything else visual and audible | exists only as the code that draws and synthesises it, so MIT covers it too |
 
 The name *Bubble Rise: Ascent* and the store pages belong to the author. A fork must use its
@@ -234,6 +298,7 @@ own package name, its own keystore and its own store page.
 | `Tools/` | 18 инструментов на Python: проверки, предпросмотр, симуляции, сборка |
 | `BuildSetup/` | `AdUnits.Example.cs` — шаблон рекламных блоков |
 | `docs/` | документация, инструкция по сборке, политика конфиденциальности |
+| `docs/images/` | листы предпросмотра выше — то, что рисует `Tools/preview_*.py` |
 
 ### Сборка
 
@@ -252,11 +317,13 @@ own package name, its own keystore and its own store page.
 |---|---|
 | `python3 Tools/check.py` | компилирует обе сборки скриптов бандлом Roslyn из самой Unity плюс `node --check` для шаблона WebGL |
 | `python3 Tools/audit.py` | ~300 проверок готовности к публикации: локализация, экономика, раскладка, эффекты, пределы безопасности для глаз |
-| `python3 Tools/preview_*.py` | рисует математику спрайтов в PNG тем же кодом, что и игра |
+| `python3 Tools/preview_*.py` | рисует математику спрайтов в PNG тем же кодом, что и игра — отсюда взяты листы выше |
 | `python3 Tools/simulate_*.py` | прогоняет экономику наград и генератор препятствий по числам из конфига |
 
 Обе возвращают ненулевой код при провале и годятся для CI. Запуск игры они не заменяют, но
-ловят регрессии за секунды и не требуют открытого редактора.
+ловят регрессии за секунды и не требуют открытого редактора. Предпросмотру нужен
+[Pillow](https://pypi.org/project/Pillow/); больше ничто за пределы стандартной библиотеки
+не выходит.
 
 ### Лицензия
 
@@ -265,6 +332,7 @@ own package name, its own keystore and its own store page.
 | Код — C#, инструменты редактора, Python в `Tools/` | [MIT](LICENSE) |
 | Шрифт Inter (`Assets/Resources/`) | [SIL Open Font License 1.1](https://scripts.sil.org/OFL) — собственная лицензия, не MIT |
 | Иконки приложения (`Assets/Icons/`), страница сайта (`docs/site/`) | **все права защищены**, под MIT не подпадают |
+| Листы предпросмотра (`docs/images/`) | вывод инструментов из `Tools/`, которые под MIT, — значит, и они тоже |
 | Всё остальное видимое и слышимое | существует только в виде кода, который его рисует и синтезирует, и подпадает под MIT вместе с ним |
 
 Название *Пузырёк: Подъём из глубин* и страницы в магазинах принадлежат автору. Форк обязан
@@ -272,7 +340,10 @@ own package name, its own keystore and its own store page.
 
 ---
 
-<p align="center">
-  <a href="https://github.com/ars6nlp"><b>ars6nlp</b></a> ·
-  <a href="https://github.com/ars6nlp/BubbleRise">github.com/ars6nlp/BubbleRise</a>
-</p>
+<div align="center">
+
+<a href="https://github.com/ars6nlp"><b>ars6nlp</b></a> ·
+<a href="https://github.com/ars6nlp/BubbleRise">github.com/ars6nlp/BubbleRise</a> ·
+<a href="https://play.google.com/store/apps/details?id=com.bubblerise.ascent">Google Play</a>
+
+</div>
