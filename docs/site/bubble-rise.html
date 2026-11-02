@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<!--
+  Страница игры для поля «Веб-сайт» в Google Play.
+
+  Лежит отдельным файлом, а не в корне сайта: корень — личный домен разработчика,
+  и занимать его одной игрой не стоит.
+
+  Ни одной внешней зависимости: ни шрифтов, ни библиотек, ни аналитики. Страница
+  обязана открываться всегда и быстро, в том числе у проверяющего Google с плохим
+  каналом. Единственная картинка — настоящая иконка игры, нарисованная кодом, как
+  и всё остальное в проекте.
+
+  Скриншоты сюда добавит разработчик, когда снимет их с телефона. Пока вместо них
+  честная иллюстрация: пузырёк со стражем, нарисованные теми же цветами, что в игре.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bubble Rise: Ascent from the Depths</title>
+<meta name="description" content="An underwater arcade game about the climb from the seabed to the surface. Ten bosses, 32 skins, no purchases.">
+<link rel="icon" href="bubble-rise-icon.png">
+<style>
+  :root {
+    --deep:   #081522;
+    --deep2:  #0D2436;
+    --teal:   #12414A;
+    --aqua:   #5BE9D1;
+    --aquadim:#2B8F82;
+    --foam:   #EAF6F2;
+    --gold:   #FFD166;
+    --coral:  #FF6B5B;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font: 17px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    color: var(--foam);
+    background: var(--deep);
+  }
+
+  /* Тот же градиент и косые лучи, что в самой игре. Чистый CSS: лишний файл —
+     лишний адрес, который может не подняться. */
+  .sea {
+    background:
+      linear-gradient(115deg, transparent 38%, rgba(91,233,209,.045) 40%, transparent 46%),
+      linear-gradient(115deg, transparent 58%, rgba(91,233,209,.035) 61%, transparent 67%),
+      linear-gradient(180deg, #14465C 0%, var(--deep2) 55%, var(--deep) 100%);
+  }
+
+  .wrap { max-width: 46rem; margin: 0 auto; padding: 0 1.25rem; }
+
+  header { padding: 4rem 0 3.5rem; text-align: center; }
+  header img { width: 112px; height: 112px; border-radius: 26px; display: block; margin: 0 auto 1.5rem; }
+  h1 { font-size: 2rem; line-height: 1.2; margin: 0 0 .6rem; }
+  .tagline { color: var(--aqua); font-size: 1.05rem; margin: 0 0 1.8rem; }
+
+  .badges { display: flex; flex-wrap: wrap; gap: .5rem; justify-content: center; }
+  .badge {
+    border: 1px solid var(--aquadim); color: var(--aqua);
+    border-radius: 999px; padding: .3rem .85rem; font-size: .85rem; white-space: nowrap;
+  }
+
+  nav { text-align: center; padding: 1.25rem 0; border-bottom: 1px solid rgba(234,246,242,.1); }
+  nav a { color: var(--aqua); margin: 0 .6rem; }
+
+  section { padding: 3rem 0 1rem; }
+  h2 { font-size: 1.35rem; margin: 2.5rem 0 .8rem; }
+  h2:first-of-type { margin-top: 0; }
+  p { margin: 0 0 1rem; }
+  .muted { color: rgba(234,246,242,.72); }
+
+  .rule {
+    border-left: 3px solid var(--coral);
+    padding: .1rem 0 .1rem 1.1rem;
+    margin: 1.5rem 0;
+  }
+
+  .grid { display: grid; gap: .9rem; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); margin: 1.5rem 0 0; }
+  .card { background: rgba(18,65,74,.35); border: 1px solid rgba(91,233,209,.16); border-radius: .7rem; padding: 1rem 1.1rem; }
+  .card b { color: var(--gold); display: block; margin-bottom: .2rem; }
+  .card span { font-size: .93rem; color: rgba(234,246,242,.78); }
+
+  hr.split { border: none; border-top: 1px solid rgba(234,246,242,.12); margin: 3.5rem 0 0; }
+
+  footer { padding: 2.5rem 0 4rem; font-size: .93rem; color: rgba(234,246,242,.65); text-align: center; }
+  footer a { color: var(--aqua); }
+  a { color: var(--aqua); }
+</style>
+</head>
+<body>
+
+<div class="sea">
+  <header class="wrap">
+    <img src="bubble-rise-icon.png" alt="Bubble Rise app icon">
+    <h1>Bubble Rise: Ascent from the Depths</h1>
+    <p class="tagline">Guide a fragile bubble up from the seabed — and shield it with your orb.</p>
+    <div class="badges">
+      <span class="badge">Free</span>
+      <span class="badge">No purchases</span>
+      <span class="badge">10 bosses</span>
+      <span class="badge">32 skins</span>
+      <span class="badge">English &amp; Русский</span>
+    </div>
+  </header>
+</div>
+
+<nav><a href="#en">English</a> · <a href="#ru">Русский</a></nav>
+
+<section class="wrap" id="en">
+  <h2>What it is</h2>
+  <p>An underwater arcade game about one long climb. The bubble rises on its own and
+  cannot be steered. Your job is the <strong>orb</strong>: a glowing guardian you drag
+  with your finger and place in front of everything coming at the bubble.</p>
+
+  <div class="rule">
+    <p style="margin:0"><strong>The orb cannot stand still.</strong> After each block it
+    dims for a third of a second and lets attacks through, and threats come from several
+    sides. Hugging the bubble fails too — the orb keeps a minimum distance. The whole
+    game is built on this one rule.</p>
+  </div>
+
+  <h2>What you will meet</h2>
+  <p>Debris falls from above, fish close in from the sides, jellyfish drift in the water.
+  Corals must be broken through in advance — no gap appears on its own. Sometimes the
+  route leads into a canyon, a kelp forest, a sunken city or a glowing trench.</p>
+
+  <h2>Ten bosses, one every thousand metres</h2>
+  <p>Each one tests something different. Hit the storm jellyfish with her own lightning.
+  Meet the serpent on its lunge line. Piranhas sweep in formation, and exactly one fish
+  in that formation can hurt you. With the shark the mouth decides: closed means block,
+  open means run. And at ten thousand metres the Great Shadow waits, remembering every
+  trick of the nine before it.</p>
+  <p class="muted">Bosses sit on round marks, not on a random schedule: the third one
+  always waits at 3000 metres, however many runs it takes you to get there. Clear the
+  whole row and it starts again, twice as hard.</p>
+
+  <div class="grid">
+    <div class="card"><b>Bestiary</b><span>An entry for every boss — what it is, its weak
+    spot, how to beat it. It opens once you have reached that boss, so nothing is spoiled.</span></div>
+    <div class="card"><b>32 skins</b><span>Unlocked by depth, by what you have deflected
+    and by boss wins. One reward is hidden: it goes to a complete collection.</span></div>
+    <div class="card"><b>Drawn in code</b><span>Every sprite and every sound is generated
+    at runtime. The game ships with zero art and audio files.</span></div>
+    <div class="card"><b>Your progress stays here</b><span>No accounts, no analytics, no purchases.
+    Ads are the only thing that reaches the network; the save file never leaves the phone.</span></div>
+  </div>
+</section>
+
+<hr class="split">
+
+<section class="wrap" id="ru" lang="ru">
+  <h2>Что это</h2>
+  <p>Подводная аркада про один долгий подъём. Пузырёк поднимается сам, управлять им
+  нельзя. Ваше дело — <strong>страж</strong>: светящийся шарик, который вы таскаете
+  пальцем и подставляете под всё, что летит навстречу.</p>
+
+  <div class="rule">
+    <p style="margin:0"><strong>Страж не может стоять на месте.</strong> После каждого
+    отбитого объекта он на треть секунды тускнеет и пропускает удары, а угрозы идут с
+    нескольких сторон. Прижаться к пузырьку тоже нельзя — страж держит минимальную
+    дистанцию. Из этого правила выведена вся игра.</p>
+  </div>
+
+  <h2>Что встретится по дороге</h2>
+  <p>Сверху сыплются обломки, с боков подплывают рыбы, в толще воды висят медузы.
+  Кораллы приходится пробивать заранее: проход сам не появится. Иногда путь уводит
+  в локацию — каньон, ламинариевый лес, затонувший город, светящаяся впадина.</p>
+
+  <h2>Десять боссов, по одному на каждую тысячу метров</h2>
+  <p>Каждый проверяет своё. Медузу бьют её же молниями. Змея встречают на линии рывка.
+  Стая пираний идёт строем, и опасна в нём ровно одна рыба. У акулы всё решает пасть:
+  сомкнута — подставляй стража, раскрыта — уводи. А на десяти тысячах ждёт Великая
+  тень, которая помнит приёмы всех девяти предыдущих.</p>
+  <p class="muted">Боссы стоят на круглых отметках, а не по случайному расписанию:
+  на 3000 метрах всегда третий, в какой бы заход туда ни дошли. Пройден весь ряд —
+  он начинается заново, но вдвое тяжелее.</p>
+
+  <div class="grid">
+    <div class="card"><b>Справочник</b><span>Статья по каждому боссу: кто это, где слабое
+    место и как победить. Открывается, когда вы до него дошли, — заранее ничего не испортит.</span></div>
+    <div class="card"><b>32 скина</b><span>Открываются глубиной, числом отбитого и победами
+    над боссами. Одна награда спрятана — она достаётся за полную коллекцию.</span></div>
+    <div class="card"><b>Нарисовано кодом</b><span>Каждый спрайт и каждый звук создаются
+    на лету. В сборке нет ни одного файла графики или звука.</span></div>
+    <div class="card"><b>Прогресс остаётся у вас</b><span>Ни аккаунтов, ни аналитики, ни покупок.
+    В сеть ходит только реклама, а сохранение не покидает телефон.</span></div>
+  </div>
+</section>
+
+<footer class="wrap">
+  <p><a href="privacy-policy.html">Privacy policy · Политика конфиденциальности</a></p>
+  <p><a href="mailto:ars6nlp@users.noreply.github.com">ars6nlp@users.noreply.github.com</a></p>
+</footer>
+
+</body>
+</html>
