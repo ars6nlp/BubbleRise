@@ -29,7 +29,7 @@
 
 ---
 
-## Not one art file · Ни одного файла с 
+## Not one art file · Ни одного 
 
 Every pixel below was produced by the C# that ships in this repository. There are no PNGs of
 enemies, skins or icons anywhere in the build — just functions of position, angle and time.
