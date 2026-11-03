@@ -85,6 +85,18 @@ Assets/Plugins/Android/googlemobileads-unity.aar.meta
 Assets/Plugins/iOS/
 Assets/Plugins/iOS.meta
 
+# External Dependency Manager приезжает вместе с SDK рекламы: те же чужие
+# библиотеки, та же установка заново.
+Assets/ExternalDependencyManager/
+Assets/ExternalDependencyManager.meta
+
+# Запечённые атласы мира — производное от кода, а не графика. Их печёт сам
+# проект (Tools → BubbleRise → 5), версия сверяется с хешем генератора, и без
+# них игра рисует мир живьём. В репозитории они только раздували бы историю:
+# каждая пересборка — новые полтора мегабайта двоичных данных.
+Assets/Resources/BakedWorld/
+Assets/Resources/BakedWorld.meta
+
 # Боевые рекламные блоки. Шаблон: BuildSetup/AdUnits.Example.cs
 Assets/Scripts/AdUnits.cs
 Assets/Scripts/AdUnits.cs.meta
