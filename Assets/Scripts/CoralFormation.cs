@@ -59,11 +59,14 @@ namespace BubbleRise
                 {
                     if (row[c] != 'X') continue;
 
-                    // отростки рисуем только там, где сверху ничего не стоит
+                    // отростки рисуем только там, где сверху ничего не стоит; окошко и
+                    // трещина — где сверху блок. Один вызов Random на блок, как и
+                    // прежде: последовательность случайных чисел для остального та же.
                     bool openAbove = r == 0 || c >= shape[r - 1].Length || shape[r - 1][c] != 'X';
+                    float roll = Random.value;
                     int variant = openAbove
-                        ? (Random.value < 0.55f ? 1 : 0)
-                        : (Random.value < 0.30f ? 2 : 0);
+                        ? (roll < 0.55f ? 1 : roll < 0.7f ? 3 : 0)
+                        : (roll < 0.25f ? 2 : roll < 0.45f ? 3 : 0);
 
                     var block = RentBlock();
                     block.Alive = true;

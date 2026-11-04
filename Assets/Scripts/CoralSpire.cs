@@ -53,7 +53,9 @@ namespace BubbleRise
             segment.Radius = radius;
             segment.Size = size;
 
-            segment.Sr.sprite = SpriteFactory.CoralLimb(Random.value < 0.5f ? 0 : 1);
+            // четыре вида звена; один вызов Random, как и прежде
+            segment.Sr.sprite = SpriteFactory.CoralLimb(Mathf.Min(SpriteFactory.CoralLimbVariants - 1,
+                (int)(Random.value * SpriteFactory.CoralLimbVariants)));
             segment.Sr.color = Color.white;
             segment.Sr.enabled = true;
 
