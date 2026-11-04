@@ -199,6 +199,19 @@ namespace BubbleRise
                 ShapeShell((SkinShape)i);
                 ShapeShellGuardian((SkinShape)i);
             }
+
+            // Боссовые скины: двадцать мини-боссов, рамка и значки карточек, атлас форм
+            // частиц. (SpriteFactory.cs тоже зовёт их через BubbleSkin/GuardianSkin — второй
+            // вызов берёт готовое из кэша.) Здесь, а не там: SpriteFactory.cs — исходник
+            // запечённых атласов мира, и любая правка в нём сбрасывает запечённое.
+            BossCardFrame();
+            foreach (BossKind boss in System.Enum.GetValues(typeof(BossKind)))
+            {
+                MiniBoss(new MiniBossKey(boss, false));
+                MiniBoss(new MiniBossKey(boss, true));
+                MiniBossBadge(boss);
+            }
+            foreach (FxShape shape in System.Enum.GetValues(typeof(FxShape))) FxShapeSprite(shape);
         }
     }
 }

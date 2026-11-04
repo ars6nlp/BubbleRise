@@ -69,6 +69,15 @@ namespace BubbleRise
         /// </summary>
         public static void Prewarm()
         {
+            foreach (var _ in PrewarmSteps()) { }
+        }
+
+        /// <summary>
+        /// Тот же прогрев, по шагам: после каждой группы — доля готового (0…1).
+        /// Экран загрузки рисует по ней полосу, а кадр не замирает на всё время.
+        /// </summary>
+        public static IEnumerable<float> PrewarmSteps()
+        {
             Disc(); Orb(); SoftDot();
 
             // Кольца оболочки столкновения: рисуются один раз на загрузке, как
@@ -78,29 +87,53 @@ namespace BubbleRise
             Bubble(); Guardian();
             GuardianGlass(); BubbleGlass();
             Rock(); Urchin(); CoralChunk();   // старые — для декораций и подсказок
+            yield return 0.04f;
 
             // Препятствия с прочностью и монета. Рисуются один раз на загрузке по той
             // же причине, что и краб: первая мина посреди заплыва иначе стоит кадра,
             // а монета рисуется в момент, когда на экране и без того взрыв.
             // Препятствия теперь с вариациями — греем их отдельной функцией.
             PrewarmHazards();
-            Coin();
+            Coin(); CoinBubble();
+            yield return 0.14f;
 
             // Начинки скинов. Их двадцать четыре, и рисуются они не дешевле боссовых:
             // без прогрева первый заход в магазин подвисал бы на листании страниц.
             for (int i = 0; i <= (int)SkinMaterial.Starlight; i++) MaterialCore((SkinMaterial)i);
-            FishSprite(FishType.Piranha); FishSprite(FishType.Lurker); FishSprite(FishType.Jellyfish);
-            LightShaft(); PlanktonMote(); WhaleSilhouette(); MantaSilhouette();
+            // Рыбы (тело, хвост, целиком), блоки строя, звенья шпилей, шары локаций —
+            // рисуются здесь, а не при первом появлении посреди заплыва.
+            foreach (FishType f in System.Enum.GetValues(typeof(FishType))) { FishSprite(f); FishBody(f); FishTail(f); }
+            for (int i = 0; i < CoralTileVariants; i++) CoralTile(i);
+            for (int i = 0; i < CoralLimbVariants; i++) CoralLimb(i);
+            CoralBlob(0); CoralBlob(1);
+            yield return 0.3f;
+            // Детали мира, свет и лёд — в атласах: один материал на слой фона.
+            // Готовые из запечённых PNG или нарисованные здесь же (SpriteFactoryBaked).
+            EnsureWorldAtlas();
+            yield return 0.42f;
+            EnsureIceAtlas();
+            yield return 0.48f;
+            PrewarmWorld();
+            yield return 0.52f;
             // Медуза собрана из слоёв: купол, свечение, глаз, звено рукава,
             // две полосы бахромы и дымка. Один общий спрайт с запечёнными
             // щупальцами ей больше не нужен.
             JellyBell(); JellyBell(true); JellyGlow(); JellyEye(); JellyArm();
-            JellyFringe(0); JellyFringe(1); JellyHaze(); JellyRipple();
+            JellyFringe(0); JellyFringe(1); JellyHaze(); JellyRipple(); JellyVeins();
+            // Грозовые разряды медузы: шесть форм в двух палитрах.
+            for (int v = 0; v < StormBoltVariants; v++) { StormBolt(v, false); StormBolt(v, true); }
             Ring(); DashedRing(); ElectricRing(); LightningBolt();
-            SerpentHead(false); SerpentHead(true);
-            SerpentBody(0, false); SerpentBody(1, false);
-            SerpentBody(0, true); SerpentBody(1, true);
-            SerpentTail(false); SerpentTail(true);
+            yield return 0.6f;
+            // Змей: два этапа, у каждого свои спрайты и маски подмеса.
+            for (int stage = 1; stage <= 2; stage++)
+            {
+                SerpentHead(stage, false); SerpentHead(stage, true);
+                SerpentBody(0, stage, false); SerpentBody(1, stage, false);
+                SerpentBody(0, stage, true); SerpentBody(1, stage, true);
+                SerpentTail(stage, false); SerpentTail(stage, true);
+            }
+            TelegraphDash();
+            yield return 0.66f;
             OctopusHead(false); OctopusHead(true);
             TentacleSegment();
             TentacleTip(false); TentacleTip(true);
@@ -112,7 +145,10 @@ namespace BubbleRise
             CrabArmSegment();
             CrabClaw(false, false); CrabClaw(true, false);
             CrabClaw(false, true); CrabClaw(true, true);
-            InkBoss(false); InkBoss(true); InkBlob(); SolidBlock();
+            // Морок: мантия с маской подмеса, глаза, клюв, звенья щупалец, шар.
+            InkMantle(false); InkEyeIris(0); InkPupil(); InkLid(); InkBeak(); InkOutline();
+            yield return 0.74f;
+            InkArm(0); InkArm(1); InkBall(); InkBlob(); SolidBlock();
             PiranhaSwarm(); Turtle();
             Shark(false, false); Shark(true, false); Shark(false, true); Shark(true, true);
             MantaBack(false); MantaBack(true); MantaBelly(false); MantaBelly(true);
@@ -120,13 +156,14 @@ namespace BubbleRise
             MantaSpike(); MantaEyeGlow();
             MantaLash(false); MantaLash(true); MantaOrb(false); MantaOrb(true);
             MantaSpark(); MantaSplitter();
+            yield return 0.84f;
             InkSplat(0); InkSplat(1); InkSplat(2);
             AimBeam(); AimChevron();
             CoralTile(0); CoralTile(1); CoralTile(2);
             CoralBlob(0); CoralBlob(1);
             CoralLimb(0); CoralLimb(1);
-            CoralPillar(); RockLedge(); RuinBlocks(); RuinArch(); Kelp();
             SideCrab(0); SideCrab(1); SideCrab(2);
+            yield return 0.88f;
             // Трофейные скины: их видно в магазине сразу, поэтому греем все.
             // Границу берём из самого перечисления: с прежним «до Turtle» каждый
             // новый босс молча оставлял свою пару скинов холодной.
@@ -139,14 +176,16 @@ namespace BubbleRise
             // Начинка трофеев: десять текстур, которые иначе рисовались бы в
             // момент открытия витрины.
             foreach (BossKind boss in Enum.GetValues(typeof(BossKind))) BossCore(boss);
+            yield return 0.95f;
             Vignette();
             SpeakerIcon(false); SpeakerIcon(true);
-            RoundedRect("btn", 0.5f);
+            RoundedRect("btn", 0.5f); GlassButton();
             RoundedRect("bar", 0.5f);
             RoundedOutline("hud", 0.35f, 0.06f);
             VignetteSolid();
             PrewarmRewards();
             PrewarmShapes();
+            yield return 1f;
         }
 
         // ---------------------------------------------------------------- ядро
@@ -155,6 +194,46 @@ namespace BubbleRise
         {
             if (Cache.TryGetValue(key, out var cached) && cached != null) return cached;
             return Upload(key, Render(Masked(key, shade), size), size, border);
+        }
+
+        /// <summary>
+        /// Как <see cref="Build"/>, но с обводкой: пиксели у края силуэта темнеют на
+        /// четверть. Один фильтр для всех угроз вместо правки двенадцати рисунков —
+        /// единый стиль: обводка чуть темнее заливки, силуэт отделён от воды.
+        /// </summary>
+        static Sprite BuildOutlined(string key, Func<Vector2, Color> shade, int size = Size)
+        {
+            if (Cache.TryGetValue(key, out var cached) && cached != null) return cached;
+            var px = Render(Masked(key, shade), size);
+            Outline(px, size, size, Mathf.Max(1, size / 64), 0.74f);
+            return Upload(key, px, size);
+        }
+
+        /// <summary>Затемнить кромку силуэта толщиной <paramref name="width"/> точек.</summary>
+        static void Outline(Color[] px, int w, int h, int width, float darken)
+        {
+            var alpha = new float[px.Length];
+            for (int i = 0; i < px.Length; i++) alpha[i] = px[i].a;
+            for (int y = 0; y < h; y++)
+            {
+                for (int x = 0; x < w; x++)
+                {
+                    int i = y * w + x;
+                    if (alpha[i] < 0.5f) continue;
+                    bool edge = false;
+                    for (int dy = -width; dy <= width && !edge; dy++)
+                    {
+                        for (int dx = -width; dx <= width && !edge; dx++)
+                        {
+                            int xx = x + dx, yy = y + dy;
+                            if (xx < 0 || yy < 0 || xx >= w || yy >= h || alpha[yy * w + xx] < 0.3f) edge = true;
+                        }
+                    }
+                    if (!edge) continue;
+                    var c = px[i];
+                    px[i] = new Color(c.r * darken, c.g * darken, c.b * darken, c.a);
+                }
+            }
         }
 
         /// <summary>Окончание ключа маски: та же форма, белая, с той же прозрачностью.</summary>
@@ -253,15 +332,36 @@ namespace BubbleRise
         static Sprite BuildRect(string key, int w, int h, Func<Vector2, Color> shade, int ss = 2)
         {
             if (Cache.TryGetValue(key, out var cached) && cached != null) return cached;
-            shade = Masked(key, shade);
+            return UploadRect(key, w, h, RenderRect(w, h, Masked(key, shade), ss));
+        }
 
-            var tex = new Texture2D(w, h, TextureFormat.RGBA32, false)
+        /// <summary>
+        /// Спрайт и его маска подмеса за ОДИН проход рисования. Маска — та же
+        /// прозрачность, белый цвет; прежде её рисовали вторым полным проходом той же
+        /// функцией формы, и прогрев дорогих боссов удваивался.
+        /// </summary>
+        static Sprite BuildRectTwin(string key, int w, int h, Func<Vector2, Color> shade, int ss = 2)
+        {
+            if (Cache.TryGetValue(key, out var cached) && cached != null) return cached;
+
+            bool wantMask = key.EndsWith(MaskSuffix, StringComparison.Ordinal);
+            string baseKey = wantMask ? key.Substring(0, key.Length - MaskSuffix.Length) : key;
+            string maskKey = baseKey + MaskSuffix;
+
+            var px = RenderRect(w, h, shade, ss);
+            if (!Cache.TryGetValue(baseKey, out var b0) || b0 == null) UploadRect(baseKey, w, h, px);
+
+            if (!Cache.TryGetValue(maskKey, out var m0) || m0 == null)
             {
-                filterMode = FilterMode.Bilinear,
-                wrapMode = TextureWrapMode.Clamp,
-                name = "tex_" + key
-            };
+                var mask = new Color[px.Length];
+                for (int i = 0; i < px.Length; i++) mask[i] = new Color(1f, 1f, 1f, px[i].a);
+                UploadRect(maskKey, w, h, mask);
+            }
+            return Cache[key];
+        }
 
+        static Color[] RenderRect(int w, int h, Func<Vector2, Color> shade, int ss)
+        {
             var px = new Color[w * h];
             int n = ss * ss;
             float aspectU = w >= h ? 1f : (float)w / h;
@@ -287,6 +387,17 @@ namespace BubbleRise
                         : new Color(0f, 0f, 0f, 0f);
                 }
             }
+            return px;
+        }
+
+        static Sprite UploadRect(string key, int w, int h, Color[] px)
+        {
+            var tex = new Texture2D(w, h, TextureFormat.RGBA32, false)
+            {
+                filterMode = FilterMode.Bilinear,
+                wrapMode = TextureWrapMode.Clamp,
+                name = "tex_" + key
+            };
 
             tex.SetPixels(px);
             tex.Apply(false, true);
@@ -657,15 +768,29 @@ namespace BubbleRise
                     c = Color.Lerp(c, pearl, 0.35f + t * 0.55f);
                 }
 
-                // Косой блик по всей поверхности.
-                if (Mathf.Abs(p.y - p.x * 0.85f - 0.34f) < 0.08f)
-                    c = Blend(c, new Color(1f, 1f, 1f, 0.3f));
+                // Косой блик: мягкий, гаснет к краям полосы, а не жёсткая лента.
+                float glint = Mathf.Abs(p.y - p.x * 0.85f - 0.34f);
+                if (glint < 0.16f)
+                {
+                    float k = 1f - glint / 0.16f;
+                    c = Blend(c, new Color(1f, 0.97f, 0.86f, 0.3f * k * k));
+                }
 
                 c.a = 1f;
                 return c;
             });
         }
 
+
+        /// <summary>Пузырёк при монете в мире: кольцо с бликом, сумма каналов 2.30.</summary>
+        public static Sprite CoinBubble() => Build("coin_bubble", p =>
+        {
+            float r = p.magnitude;
+            if (r > 0.95f) return Color.clear;
+            float ring = Mathf.SmoothStep(0.55f, 0.88f, r) * Mathf.SmoothStep(0.97f, 0.86f, r);
+            float spec = Mathf.SmoothStep(0.3f, 0f, Vector2.Distance(p, new Vector2(-0.3f, 0.34f)));
+            return new Color(0.72f, 0.78f, 0.80f, Mathf.Clamp01(ring * 0.8f + spec * 0.9f + 0.05f));
+        }, size: 32);
 
         /// <summary>Разряд молнии. Смотрит в +X, поворачивается по вектору скорости.</summary>
         public static Sprite LightningBolt() => BuildRect("bolt", 160, 72, p =>
@@ -782,370 +907,8 @@ namespace BubbleRise
             return new Color(1f, 1f, 1f, Mathf.SmoothStep(0f, 1f, a) * cut);
         });
 
-        // -------------------------------------------------------------- рыбы
-
-        /// <summary>
-        /// Рыба, смотрит вправо (+X): при движении влево спрайт переворачивается через flipY.
-        /// Piranha — быстрая зубастая мелочь, Lurker — крупная тёмная тварь со светящимся глазом.
-        /// </summary>
-        public static Sprite FishSprite(FishType type)
-        {
-            if (type == FishType.Jellyfish) return JellyfishSprite();
-
-            bool piranha = type == FishType.Piranha;
-            Color body = piranha ? Palette.PiranhaBody : Palette.LurkerBody;
-            Color fin = piranha ? Palette.PiranhaFin : Palette.LurkerFin;
-            Color eyeGlow = piranha ? Color.white : Palette.Gold;
-
-            return Build(piranha ? "fish_piranha" : "fish_lurker", p =>
-            {
-                // хвост
-                if (InTriangle(p, new Vector2(-0.52f, 0f), new Vector2(-1.0f, 0.46f), new Vector2(-1.0f, -0.46f)))
-                    return fin;
-
-                // спинной плавник
-                if (InTriangle(p, new Vector2(-0.22f, 0.24f), new Vector2(0.16f, 0.26f), new Vector2(-0.06f, 0.62f)))
-                    return fin;
-                // брюшной плавник
-                if (InTriangle(p, new Vector2(-0.18f, -0.24f), new Vector2(0.10f, -0.26f), new Vector2(-0.10f, -0.52f)))
-                    return fin;
-
-                // тело — эллипс
-                float ex = (p.x + 0.04f) / 0.66f;
-                float ey = p.y / 0.36f;
-                if (ex * ex + ey * ey > 1f) return Color.clear;
-
-                Color c = Color.Lerp(body * 0.7f, body, Mathf.InverseLerp(-0.34f, 0.3f, p.y));
-                c.a = 1f;
-
-                // пасть с зубами у носа
-                if (p.x > 0.30f && p.y < 0.02f && p.y > -0.20f)
-                {
-                    c = Palette.BossMaw;
-                    for (int i = 0; i < 3; i++)
-                    {
-                        float x0 = 0.36f + i * 0.10f;
-                        if (InTriangle(p, new Vector2(x0 - 0.032f, 0.02f), new Vector2(x0 + 0.032f, 0.02f),
-                                          new Vector2(x0, -0.12f)))
-                            c = Palette.BossTeeth;
-                    }
-                    return c;
-                }
-
-                // глаз
-                float de = Vector2.Distance(p, new Vector2(0.26f, 0.12f));
-                if (de < 0.11f)
-                {
-                    c = eyeGlow;
-                    if (Vector2.Distance(p, new Vector2(0.29f, 0.12f)) < 0.05f)
-                        c = new Color(0.06f, 0.02f, 0.04f, 1f);
-                    c.a = 1f;
-                    return c;
-                }
-
-                // полоски на боку
-                if (piranha && Mathf.Repeat(p.x * 6.5f, 1f) < 0.28f)
-                    c = Blend(c, new Color(0f, 0f, 0f, 0.16f));
-
-                return c;
-            });
-        }
-
-        // ------------------------------------------------- коралловые блоки
-
-        /// <summary>
-        /// Блок коралловой постройки. Из таких блоков собираются фигуры (квадрат, ромб,
-        /// крест, арка...). Три варианта, чтобы кладка не выглядела штампованной:
-        /// 0 — обычный, 1 — с отростками сверху, 2 — с полостью внутри.
-        /// </summary>
-        public static Sprite CoralTile(int variant)
-        {
-            variant = Mathf.Clamp(variant, 0, 2);
-            var pores = PorePattern(variant);
-
-            return Build("coral_tile_" + variant, p =>
-            {
-                // отростки сверху — только у варианта 1, торчат над блоком
-                if (variant == 1)
-                {
-                    for (int i = -1; i <= 1; i++)
-                    {
-                        float x0 = i * 0.42f + 0.05f;
-                        float top = 0.99f - Mathf.Abs(i) * 0.09f;
-                        if (TaperedSegment(p, new Vector2(x0, 0.72f), new Vector2(x0 + i * 0.09f, top), 0.09f, 0.05f) ||
-                            Vector2.Distance(p, new Vector2(x0 + i * 0.09f, top)) < 0.07f)
-                            return Palette.CoralTip;
-                    }
-                }
-
-                // тело блока: скруглённый квадрат с неровным краем
-                float wobble = Mathf.Sin(p.x * 7.3f + variant) * 0.018f + Mathf.Cos(p.y * 6.1f) * 0.018f;
-                float half = 0.90f + wobble;
-                float r = 0.20f;
-                float qx = Mathf.Abs(p.x) - (half - r);
-                float qy = Mathf.Abs(p.y) - (half - r);
-                float sd = (qx > 0f && qy > 0f) ? Mathf.Sqrt(qx * qx + qy * qy) : Mathf.Max(qx, qy);
-                if (sd > r) return Color.clear;
-
-                Color c = Color.Lerp(Palette.Hex("8E4232"), Palette.CoralBody,
-                                     Mathf.InverseLerp(-0.9f, 0.9f, p.y));
-                c.a = 1f;
-
-                // светлая кромка сверху и тень снизу
-                if (sd > r - 0.14f && p.y > 0.1f) c = Blend(c, new Color(1f, 1f, 1f, 0.20f));
-                if (sd > r - 0.12f && p.y < -0.3f) c = Blend(c, new Color(0f, 0f, 0f, 0.22f));
-
-                // полость у варианта 2
-                if (variant == 2)
-                {
-                    float inner = Mathf.Max(Mathf.Abs(p.x), Mathf.Abs(p.y));
-                    if (inner < 0.42f) return Blend(c, new Color(0f, 0f, 0f, 0.45f));
-                    if (inner < 0.52f) return Blend(c, new Color(1f, 1f, 1f, 0.12f));
-                }
-
-                // поры
-                for (int i = 0; i < pores.Length; i++)
-                {
-                    float d = Vector2.Distance(p, pores[i]);
-                    if (d < 0.085f) return Blend(c, new Color(0f, 0f, 0f, 0.30f));
-                    if (d < 0.115f) return Blend(c, new Color(1f, 1f, 1f, 0.10f));
-                }
-
-                return c;
-            });
-        }
-
-        static Vector2[] PorePattern(int variant)
-        {
-            switch (variant)
-            {
-                case 1:
-                    return new[] { new Vector2(-0.45f, -0.15f), new Vector2(0.30f, 0.10f), new Vector2(0.05f, -0.55f) };
-                case 2:
-                    return new[] { new Vector2(-0.68f, 0.55f), new Vector2(0.66f, -0.52f) };
-                default:
-                    return new[] { new Vector2(-0.38f, 0.36f), new Vector2(0.42f, -0.22f),
-                                   new Vector2(-0.10f, -0.58f), new Vector2(0.55f, 0.52f) };
-            }
-        }
-
-        // --------------------------------------------- сегмент длинного коралла
-
-        /// <summary>
-        /// Звено длинного коралла: овал, вытянутый вдоль ветви. Звенья ставятся
-        /// внахлёст, поэтому цепочка читается как сплошная ветка, а не как бусы.
-        /// </summary>
-        public static Sprite CoralLimb(int variant)
-        {
-            variant = Mathf.Clamp(variant, 0, 1);
-            Color body = variant == 0 ? Palette.CoralBody : Palette.Hex("A85138");
-
-            return Build("limb_" + variant, p =>
-            {
-                // неровная толщина — ветка живая, а не труба
-                float bulge = 0.60f + 0.05f * Mathf.Sin(p.x * 6.5f + variant * 2f);
-                float ex = p.x / 0.97f;
-                float ey = p.y / bulge;
-                if (ex * ex + ey * ey > 1f) return Color.clear;
-
-                Color c = Color.Lerp(body * 0.68f, body, Mathf.InverseLerp(-bulge, bulge * 0.8f, p.y));
-                c.a = 1f;
-
-                // блик сверху и тень снизу
-                if (p.y > bulge * 0.45f) c = Blend(c, new Color(1f, 1f, 1f, 0.16f));
-                if (p.y < -bulge * 0.55f) c = Blend(c, new Color(0f, 0f, 0f, 0.18f));
-
-                // поры вдоль ветви
-                for (int i = -2; i <= 2; i++)
-                {
-                    float px = i * 0.34f + (variant == 0 ? 0.08f : -0.06f);
-                    float py = (i % 2 == 0 ? 0.14f : -0.16f);
-                    float d = Vector2.Distance(p, new Vector2(px, py));
-                    if (d < 0.07f) return Blend(c, new Color(0f, 0f, 0f, 0.28f));
-                    if (d < 0.10f) return Blend(c, new Color(1f, 1f, 1f, 0.12f));
-                }
-
-                return c;
-            });
-        }
-
-        // ------------------------------------------------ шары локаций
-
-        /// <summary>
-        /// Коралловый шар — основная фигура внутри локаций. Рисуется почти белым,
-        /// чтобы тонироваться под цвет локации через SpriteRenderer.color.
-        /// 0 — мозговой коралл с бороздами, 1 — актиния с бугорками по краю.
-        /// </summary>
-        public static Sprite CoralBlob(int variant)
-        {
-            variant = Mathf.Clamp(variant, 0, 1);
-
-            return Build("blob_" + variant, p =>
-            {
-                float d = p.magnitude;
-
-                if (variant == 1)
-                {
-                    // бугорки по краю выходят чуть за окружность
-                    float angle = Mathf.Atan2(p.y, p.x);
-                    float nubs = 0.90f + 0.09f * Mathf.Cos(angle * 11f);
-                    if (d > nubs) return Color.clear;
-                }
-                else if (d > 0.95f) return Color.clear;
-
-                // объём: светлее сверху-слева, тень снизу
-                float shade = Mathf.Lerp(1f, 0.74f,
-                    Mathf.Clamp01(Vector2.Distance(p, new Vector2(-0.32f, 0.34f)) / 1.5f));
-                Color c = new Color(0.949f, 0.969f, 0.953f, 1f) * shade;
-                c.a = 1f;
-
-                if (variant == 0)
-                {
-                    // борозды мозгового коралла
-                    float wave = Mathf.Sin(p.x * 5.5f + Mathf.Sin(p.y * 4.2f) * 1.6f);
-                    if (wave > 0.55f) c = Blend(c, new Color(0.62f, 0.71f, 0.66f, 0.55f));
-                }
-                else
-                {
-                    // тёмная сердцевина актинии
-                    if (d < 0.34f) c = Blend(c, new Color(0.55f, 0.63f, 0.60f, 0.45f));
-                    if (d < 0.16f) c = Blend(c, new Color(0.42f, 0.50f, 0.48f, 0.55f));
-                }
-
-                // светлый ободок
-                if (d > 0.82f && d < 0.93f) c = Blend(c, new Color(1f, 1f, 1f, 0.30f));
-
-                return c;
-            });
-        }
-
-        /// <summary>
-        /// Медуза: полупрозрачный купол и волнистые щупальца. Рисуется «куполом вверх»
-        /// и, в отличие от рыб, по направлению движения не поворачивается.
-        /// </summary>
-        static Sprite JellyfishSprite() => Build("jellyfish", p =>
-        {
-            Color bell = Palette.JellyBell;
-            Color core = Palette.JellyCore;
-
-            // щупальца
-            if (p.y < -0.10f)
-            {
-                for (int i = -2; i <= 2; i++)
-                {
-                    float baseX = i * 0.26f;
-                    float wave = Mathf.Sin(p.y * 7f + i * 1.3f) * 0.09f;
-                    float width = Mathf.Lerp(0.055f, 0.018f, Mathf.InverseLerp(-0.10f, -0.95f, p.y));
-                    if (Mathf.Abs(p.x - (baseX + wave)) < width && p.y > -0.96f)
-                    {
-                        float fade = Mathf.InverseLerp(-0.96f, -0.10f, p.y);
-                        return new Color(core.r, core.g, core.b, 0.30f + 0.45f * fade);
-                    }
-                }
-            }
-
-            // купол: половина эллипса с фестончатым низом
-            float scallop = Mathf.Abs(Mathf.Sin(p.x * 7.5f)) * 0.06f;
-            float bottom = -0.16f + scallop;
-            if (p.y < bottom) return Color.clear;
-
-            float ex = p.x / 0.92f;
-            float ey = (p.y + 0.16f) / 0.92f;
-            if (ex * ex + ey * ey > 1f) return Color.clear;
-
-            float d = Mathf.Sqrt(ex * ex + ey * ey);
-            Color c = Color.Lerp(new Color(1f, 1f, 1f, 0.55f), bell.WithAlpha(0.42f), d);
-
-            // светящееся ядро и внутренние прожилки
-            if (Vector2.Distance(p, new Vector2(0f, 0.02f)) < 0.30f)
-                c = Blend(c, core.WithAlpha(0.40f));
-            if (d > 0.82f) c = Blend(c, new Color(1f, 1f, 1f, 0.35f));
-            if (Mathf.Abs(Mathf.Sin(p.x * 9f)) > 0.93f && p.y > bottom)
-                c = Blend(c, new Color(1f, 1f, 1f, 0.18f));
-
-            return c;
-        });
-
-        // ------------------------------------------------- дальний план океана
-
-        /// <summary>Силуэт кита, смотрит в +X. Рисуется плоским — цвет и прозрачность задаёт тинт.</summary>
-        public static Sprite WhaleSilhouette() => BuildRect("whale", 256, 112, p =>
-        {
-            // хвостовые лопасти
-            if (InTriangle(p, new Vector2(-0.70f, 0.02f), new Vector2(-1.00f, 0.40f), new Vector2(-0.84f, 0.02f)) ||
-                InTriangle(p, new Vector2(-0.70f, -0.02f), new Vector2(-1.00f, -0.40f), new Vector2(-0.84f, -0.02f)))
-                return Color.white;
-
-            // корпус: плавное веретено от носа к хвостовому стеблю
-            float t = Mathf.InverseLerp(1.00f, -0.66f, p.x);
-            if (t < 0f || t > 1f) return Color.clear;
-            float half = 0.33f * Mathf.Sin(t * Mathf.PI * 0.85f + 0.25f);
-
-            // грудной плавник
-            if (InTriangle(p, new Vector2(0.28f, -0.08f), new Vector2(-0.02f, -0.40f), new Vector2(0.32f, -0.24f)))
-                return Color.white;
-            // спинной плавник
-            if (InTriangle(p, new Vector2(-0.34f, half * 0.8f), new Vector2(-0.08f, half * 0.8f),
-                              new Vector2(-0.26f, half + 0.11f)))
-                return Color.white;
-
-            // брюхо чуть более плоское, чем спина
-            if (p.y < half && p.y > -half * 0.88f) return Color.white;
-            return Color.clear;
-        }, 3);
-
-        /// <summary>Силуэт манты сверху: +X — направление движения, крылья уходят по вертикали.</summary>
-        public static Sprite MantaSilhouette() => BuildRect("manta", 176, 224, p =>
-        {
-            // головные лопасти
-            for (int s = -1; s <= 1; s += 2)
-            {
-                if (InTriangle(p, new Vector2(0.46f, s * 0.09f), new Vector2(0.74f, s * 0.15f),
-                                  new Vector2(0.46f, s * 0.21f)))
-                    return Color.white;
-            }
-
-            // хвост
-            if (p.x < -0.28f && p.x > -0.76f && Mathf.Abs(p.y) < 0.035f) return Color.white;
-
-            if (Mathf.Abs(p.y) > 0.97f) return Color.clear;
-
-            // крыло: передняя кромка выпуклая, задняя скошена назад к концам
-            float leading = 0.60f * Mathf.Cos(p.y * 1.35f);
-            float trailing = -0.30f - 0.42f * Mathf.Abs(p.y);
-            if (p.x < leading && p.x > trailing) return Color.white;
-
-            return Color.clear;
-        }, 3);
-
-        /// <summary>Светящаяся частица планктона: ядро плюс мягкий крест лучей.</summary>
-        public static Sprite PlanktonMote() => Build("plankton", p =>
-        {
-            float d = p.magnitude;
-            float core = Mathf.SmoothStep(1f, 0f, Mathf.InverseLerp(0.10f, 0.44f, d));
-
-            float rayH = Mathf.SmoothStep(1f, 0f, Mathf.InverseLerp(0.02f, 0.11f, Mathf.Abs(p.y)))
-                       * Mathf.SmoothStep(1f, 0f, Mathf.InverseLerp(0.12f, 1f, Mathf.Abs(p.x)));
-            float rayV = Mathf.SmoothStep(1f, 0f, Mathf.InverseLerp(0.02f, 0.11f, Mathf.Abs(p.x)))
-                       * Mathf.SmoothStep(1f, 0f, Mathf.InverseLerp(0.12f, 1f, Mathf.Abs(p.y)));
-
-            float a = Mathf.Clamp01(core + (rayH + rayV) * 0.5f);
-            return a <= 0.01f ? Color.clear : new Color(1f, 1f, 1f, a);
-        });
-
-        /// <summary>Луч света с поверхности: узкий сверху, расходится вниз и гаснет.</summary>
-        public static Sprite LightShaft() => BuildRect("light_shaft", 96, 256, p =>
-        {
-            // p.y: 1 сверху, -1 снизу; p.x в пределах ±0.375
-            float t = Mathf.InverseLerp(1f, -1f, p.y);
-            float halfWidth = Mathf.Lerp(0.11f, 0.34f, t);
-            float edge = Mathf.SmoothStep(1f, 0f, Mathf.InverseLerp(halfWidth * 0.35f, halfWidth, Mathf.Abs(p.x)));
-            float fade = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(-1f, -0.15f, p.y));
-            float a = edge * fade * 0.9f;
-            return a <= 0.01f ? Color.clear : new Color(1f, 1f, 1f, a);
-        }, 3);
-
-        // ----------------------------------------------------------- декорации
+        // Рыбы — SpriteFactoryFish.cs; блоки строя, звенья шпилей и шары локаций —
+        // SpriteFactoryCoral.cs.
 
         static bool TaperedSegment(Vector2 p, Vector2 a, Vector2 b, float widthA, float widthB)
         {
@@ -1158,129 +921,6 @@ namespace BubbleRise
 
         static bool InRect(Vector2 p, float x0, float y0, float x1, float y1)
             => p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1;
-
-        /// <summary>Коралловая колонна — тянется снизу вверх, ветвится.</summary>
-        public static Sprite CoralPillar() => BuildRect("sc_pillar", 48, 168, p =>
-        {
-            Color body = Palette.CoralBody;
-            Color tip = Palette.CoralTip;
-
-            // ствол
-            if (TaperedSegment(p, new Vector2(0f, -1f), new Vector2(0.02f, 0.78f), 0.20f, 0.065f))
-                return Color.Lerp(body * 0.75f, body, Mathf.InverseLerp(-1f, 0.8f, p.y));
-
-            // ветви
-            if (TaperedSegment(p, new Vector2(0f, -0.30f), new Vector2(0.20f, 0.10f), 0.085f, 0.045f) ||
-                TaperedSegment(p, new Vector2(0f, 0.15f), new Vector2(-0.19f, 0.50f), 0.075f, 0.040f) ||
-                TaperedSegment(p, new Vector2(0f, 0.45f), new Vector2(0.17f, 0.80f), 0.065f, 0.038f))
-                return body * 0.88f;
-
-            // утолщения на концах
-            if (Vector2.Distance(p, new Vector2(0.20f, 0.10f)) < 0.06f ||
-                Vector2.Distance(p, new Vector2(-0.19f, 0.50f)) < 0.055f ||
-                Vector2.Distance(p, new Vector2(0.17f, 0.80f)) < 0.05f ||
-                Vector2.Distance(p, new Vector2(0.02f, 0.80f)) < 0.055f)
-                return tip;
-
-            return Color.clear;
-        });
-
-        /// <summary>Каменный уступ — торчит от края экрана внутрь.</summary>
-        public static Sprite RockLedge()
-        {
-            var poly = new[]
-            {
-                new Vector2(-1.00f, -0.44f), new Vector2(-1.00f, 0.40f), new Vector2(-0.58f, 0.30f),
-                new Vector2(-0.12f, 0.38f), new Vector2(0.32f, 0.18f), new Vector2(0.70f, 0.02f),
-                new Vector2(0.94f, -0.18f), new Vector2(0.58f, -0.40f)
-            };
-            return BuildRect("sc_ledge", 168, 84, p =>
-            {
-                if (!InPolygon(p, poly)) return Color.clear;
-                Color c = Palette.Hex("46525E");
-                c = Color.Lerp(c * 0.6f, c, Mathf.InverseLerp(-0.42f, 0.34f, p.y));
-                c.a = 1f;
-                // светлая кромка сверху
-                if (!InPolygon(new Vector2(p.x, p.y + 0.07f), poly)) c = Blend(c, new Color(1f, 1f, 1f, 0.14f));
-                return c;
-            });
-        }
-
-        /// <summary>Затонувшая постройка — блоки-прямоугольники, явная рукотворная геометрия.</summary>
-        public static Sprite RuinBlocks() => BuildRect("sc_ruin", 128, 128, p =>
-        {
-            Color stone = Palette.Hex("3D4A55");
-
-            bool a = InRect(p, -0.92f, -1.00f, 0.58f, -0.12f);
-            bool b = InRect(p, -0.72f, -0.10f, 0.16f, 0.44f);
-            bool c2 = InRect(p, -0.56f, 0.46f, -0.14f, 0.86f);
-            bool d = InRect(p, 0.20f, -0.10f, 0.78f, 0.22f);
-            if (!(a || b || c2 || d)) return Color.clear;
-
-            Color c = Color.Lerp(stone * 0.62f, stone, Mathf.InverseLerp(-1f, 0.9f, p.y));
-            c.a = 1f;
-
-            // швы кладки
-            if (Mathf.Repeat(p.y * 5.6f + 0.5f, 1f) < 0.09f) c = Blend(c, new Color(0f, 0f, 0f, 0.35f));
-            if (Mathf.Repeat(p.x * 4.3f, 1f) < 0.07f) c = Blend(c, new Color(0f, 0f, 0f, 0.22f));
-
-            // подсветка верхних граней
-            bool aboveA = InRect(new Vector2(p.x, p.y + 0.06f), -0.92f, -1.00f, 0.58f, -0.12f);
-            bool aboveB = InRect(new Vector2(p.x, p.y + 0.06f), -0.72f, -0.10f, 0.16f, 0.44f);
-            bool aboveC = InRect(new Vector2(p.x, p.y + 0.06f), -0.56f, 0.46f, -0.14f, 0.86f);
-            bool aboveD = InRect(new Vector2(p.x, p.y + 0.06f), 0.20f, -0.10f, 0.78f, 0.22f);
-            if (!(aboveA || aboveB || aboveC || aboveD))
-                c = Blend(c, new Color(1f, 1f, 1f, 0.16f));
-
-            return c;
-        });
-
-        /// <summary>Каменная арка — крупный ориентир, хорошо читается при прокрутке.</summary>
-        public static Sprite RuinArch() => BuildRect("sc_arch", 168, 120, p =>
-        {
-            Color stone = Palette.Hex("36424D");
-
-            bool left = InRect(p, -0.94f, -0.71f, -0.54f, 0.24f);
-            bool right = InRect(p, 0.54f, -0.71f, 0.94f, 0.24f);
-            bool beam = InRect(p, -0.94f, 0.24f, 0.94f, 0.50f);
-
-            // свод: кольцо между пилонами
-            float d = Vector2.Distance(p, new Vector2(0f, 0.24f));
-            bool vault = p.y > 0.24f && d > 0.54f && d < 0.94f;
-
-            if (!(left || right || beam || vault)) return Color.clear;
-            // вырезаем проём под сводом
-            if (beam && d < 0.54f && p.y > 0.24f) return Color.clear;
-
-            Color c = Color.Lerp(stone * 0.6f, stone, Mathf.InverseLerp(-0.71f, 0.5f, p.y));
-            c.a = 1f;
-            if (Mathf.Repeat(p.y * 6.5f, 1f) < 0.08f) c = Blend(c, new Color(0f, 0f, 0f, 0.30f));
-            return c;
-        });
-
-        /// <summary>Водоросль — длинная волнистая лента.</summary>
-        public static Sprite Kelp() => BuildRect("sc_kelp", 40, 180, p =>
-        {
-            float centre = Mathf.Sin(p.y * 3.1f + 0.7f) * 0.11f;
-            float width = Mathf.Lerp(0.055f, 0.022f, Mathf.InverseLerp(-1f, 1f, p.y));
-            if (p.y > 0.94f) return Color.clear;
-
-            Color body = Palette.Hex("1F4F47");
-
-            if (Mathf.Abs(p.x - centre) < width)
-                return Color.Lerp(body * 0.7f, body, Mathf.InverseLerp(-1f, 1f, p.y));
-
-            // листья
-            for (int i = 0; i < 6; i++)
-            {
-                float ly = -0.85f + i * 0.34f;
-                float lc = Mathf.Sin(ly * 3.1f + 0.7f) * 0.11f;
-                int side = i % 2 == 0 ? 1 : -1;
-                if (TaperedSegment(p, new Vector2(lc, ly), new Vector2(lc + side * 0.14f, ly + 0.16f), 0.035f, 0.008f))
-                    return body * 0.85f;
-            }
-            return Color.clear;
-        });
 
         /// <summary>
         /// Рифовый краб для боковых камней. Три кадра — это фазы шага: ноги
@@ -1435,11 +1075,47 @@ namespace BubbleRise
         /// </summary>
         public static Sprite VignetteSolid() => Build("vignette_solid", p =>
         {
-            float d = Mathf.Clamp01(p.magnitude / 1.35f);
-            Color inner = Palette.Deep.WithAlpha(0.955f);
-            Color outer = Palette.Hex("060F18", 0.99f);
-            return Color.Lerp(inner, outer, Mathf.SmoothStep(0f, 1f, d));
+            // Толща воды за экранами меню: сверху светлее, свет с поверхности
+            // мягким пятном и двумя широкими лучами, углы темнее. Непрозрачна:
+            // пузырёк и страж сквозь неё не читаются (см. выше).
+            Color c = Color.Lerp(Palette.Hex("050A14"), Palette.Hex("0E2236"), Mathf.SmoothStep(-1f, 1f, p.y));
+            float glow = Mathf.Exp(-(p.x * p.x * 1.6f + (p.y - 1f) * (p.y - 1f) * 2.2f));
+            c = Color.Lerp(c, Palette.Hex("1E4A60"), glow * 0.45f);
+            for (int i = -1; i <= 1; i += 2)
+            {
+                float band = Mathf.Abs(p.x + p.y * 0.22f - i * 0.42f);
+                float shaft = Mathf.Clamp01(1f - band / 0.16f) * Mathf.SmoothStep(-1f, 0.9f, p.y);
+                c = Color.Lerp(c, Palette.Hex("173A50"), shaft * shaft * 0.35f);
+            }
+            float corner = Mathf.Clamp01(p.magnitude / 1.35f);
+            c = Color.Lerp(c, Palette.Hex("03070D"), Mathf.SmoothStep(0.55f, 1f, corner) * 0.6f);
+            c.a = 0.975f;
+            return c;
         });
+
+        /// <summary>
+        /// Стеклянная кнопка: светлая обводка и тёмная полупрозрачная заливка с
+        /// бликом под верхней кромкой. Белая — цвет даёт Image.color: обводка
+        /// ложится этим цветом, заливка — им же, но на треть яркости.
+        /// </summary>
+        public static Sprite GlassButton()
+        {
+            const int s = 96;
+            const float r = 0.5f;
+            int borderPx = Mathf.RoundToInt(r * s * 0.5f) + 2;
+            return Build("glass_btn", p =>
+            {
+                float qx = Mathf.Abs(p.x) - (1f - r);
+                float qy = Mathf.Abs(p.y) - (1f - r);
+                float d = qx > 0f && qy > 0f ? Mathf.Sqrt(qx * qx + qy * qy) : Mathf.Max(qx, qy);
+                float sd = d - r;
+                if (sd > 0f) return Color.clear;
+                if (sd > -0.07f) return Color.white;
+                float k = Mathf.Lerp(0.22f, 0.34f, (p.y + 1f) * 0.5f);
+                if (sd > -0.14f && p.y > 0.25f) k += 0.12f;
+                return new Color(k, k, k, 0.84f);
+            }, new Vector4(borderPx, borderPx, borderPx, borderPx), s);
+        }
 
         /// <summary>Скруглённый прямоугольник с 9-slice границей — для кнопок и панелей.</summary>
         public static Sprite RoundedRect(string key, float cornerFraction = 0.45f)
@@ -1476,18 +1152,6 @@ namespace BubbleRise
                 if (sd > -thickness) return Color.white;
                 return new Color(1f, 1f, 1f, 0.30f);
             }, new Vector4(borderPx, borderPx, borderPx, borderPx), s);
-        }
-
-        /// <summary>Вертикальный градиент 1xN — фон. Цвета обновляются в рантайме.</summary>
-        public static Texture2D CreateGradientTexture(int height)
-        {
-            var tex = new Texture2D(1, height, TextureFormat.RGBA32, false)
-            {
-                filterMode = FilterMode.Bilinear,
-                wrapMode = TextureWrapMode.Clamp,
-                name = "tex_gradient"
-            };
-            return tex;
         }
     }
 }
