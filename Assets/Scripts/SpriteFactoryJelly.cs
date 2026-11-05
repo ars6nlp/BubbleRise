@@ -342,5 +342,126 @@ namespace BubbleRise
             c.a = ring * 0.3f;
             return c;
         }, size: JellySize);
+        // ------------------------------------------------------ грозовой разряд
+
+        /// <summary>Сколько запечённых форм у разряда медузы.</summary>
+        public const int StormBoltVariants = 6;
+
+        // Враждебный: сине-фиолетовый с бирюзовой сердцевиной. Отражённый:
+        // бирюзово-голубой. Обводка тёмная — разряд читается и на светлом луче.
+        // Суммы каналов: 1.84 / 2.00 / 2.00 / 2.28 — белого нет.
+        public static readonly Color StormBodyHostile = Palette.Hex("7A5CFF");
+        public static readonly Color StormCoreHostile = Palette.Hex("49E3D0");
+        public static readonly Color StormBodyReflected = Palette.Hex("3FD8E8");
+        public static readonly Color StormCoreReflected = Palette.Hex("8AE5D6");
+        static readonly Color StormOutline = Palette.Hex("0A0B24");
+
+        static readonly Vector2[][] StormStems = new Vector2[StormBoltVariants][];
+        static readonly Vector2[][] StormBranches = new Vector2[StormBoltVariants][];
+
+        static float StormHash(int a, int b)
+        {
+            int h = a * 73856093 ^ b * 19349663;
+            h = (h ^ (h >> 13)) * 1274126177;
+            return ((h ^ (h >> 16)) & 0x7fffffff) / (float)0x7fffffff;
+        }
+
+        /// <summary>
+        /// Геометрия формы: стержень из семи точек от хвоста (−X) к острию (+X) с
+        /// неровными изломами и три тонких ответвления, отходящих назад. Считается
+        /// один раз на форму, а не на пиксель.
+        /// </summary>
+        static void StormShape(int v, out Vector2[] stem, out Vector2[] branches)
+        {
+            if (StormStems[v] == null)
+            {
+                const int k = 7;
+                var s = new Vector2[k];
+                for (int i = 0; i < k; i++)
+                {
+                    float x = Mathf.Lerp(-0.95f, 0.95f, i / (float)(k - 1));
+                    float y = i == 0 || i == k - 1 ? 0f : (StormHash(v * 31 + i, 7) - 0.5f) * 0.42f;
+                    s[i] = new Vector2(x + (StormHash(v, i) - 0.5f) * 0.08f, y);
+                }
+                // по две точки на ответвление: корень на стержне и кончик назад-вбок
+                var b = new Vector2[6];
+                for (int j = 0; j < 3; j++)
+                {
+                    var root = s[1 + (j + v) % (k - 2)];
+                    float side = (j % 2 == 0 ? 1f : -1f) * (StormHash(v, 40 + j) > 0.5f ? 1f : -1f);
+                    float len = 0.22f + StormHash(v, 50 + j) * 0.18f;
+                    b[j * 2] = root;
+                    b[j * 2 + 1] = root + new Vector2(-len * 0.8f, side * len * 0.75f);
+                }
+                StormStems[v] = s;
+                StormBranches[v] = b;
+            }
+            stem = StormStems[v];
+            branches = StormBranches[v];
+        }
+
+        /// <summary>
+        /// Форма разряда медузы: тёмная обводка, тело цвета палитры, бирюзовая
+        /// сердцевина по стержню и мягкое гало. Тот же размер, что у прежней
+        /// молнии (160×72): рисунок в пределах хитбокса.
+        /// </summary>
+        public static Sprite StormBolt(int variant, bool reflected)
+        {
+            variant = ((variant % StormBoltVariants) + StormBoltVariants) % StormBoltVariants;
+            StormShape(variant, out var stem, out var br);
+            Color body = reflected ? StormBodyReflected : StormBodyHostile;
+            Color core = reflected ? StormCoreReflected : StormCoreHostile;
+
+            return BuildRect("storm_bolt_" + variant + (reflected ? "_r" : ""), 160, 72, p =>
+            {
+                float ds = 9f;
+                for (int i = 0; i + 1 < stem.Length; i++) ds = Mathf.Min(ds, DistToSegment(p, stem[i], stem[i + 1]));
+                float db = 9f;
+                for (int j = 0; j < 3; j++) db = Mathf.Min(db, DistToSegment(p, br[j * 2], br[j * 2 + 1]));
+
+                // стержень толще к острию: разряд «летит» вперёд
+                float taper = Mathf.Lerp(0.75f, 1.1f, Mathf.InverseLerp(-1f, 1f, p.x));
+                float sOut = 0.10f * taper, sBody = 0.068f * taper, sCore = 0.026f * taper;
+                const float bOut = 0.055f, bBody = 0.032f;
+
+                if (ds < sCore) return core;
+                if (ds < sBody || db < bBody) return body;
+                if (ds < sOut || db < bOut) return StormOutline.WithAlpha(0.85f);
+
+                float halo = Mathf.Min(ds - sOut, db - bOut);
+                if (halo < 0.09f) return body.WithAlpha(0.22f * (1f - halo / 0.09f));
+                return Color.clear;
+            }, 2);
+        }
+
+        /// <summary>
+        /// Жилки купола: ветвятся от макушки вниз. Белые с мягким краем, тинтуются
+        /// бирюзой — по ним бежит свет телеграфа.
+        /// </summary>
+        public static Sprite JellyVeins() => Build("jelly_veins", p =>
+        {
+            float ex = p.x / 0.92f;
+            float ey = (p.y + 0.20f) / 0.96f;
+            if (ex * ex + ey * ey > 1f || p.y < -0.55f) return Color.clear;
+
+            var top = new Vector2(0f, 0.62f);
+            float d = 9f;
+            for (int i = 0; i < 7; i++)
+            {
+                float a = Mathf.Lerp(-2.45f, -0.69f, i / 6f);
+                var mid = top + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * 0.5f;
+                var end = top + new Vector2(Mathf.Cos(a) * 1.25f, Mathf.Sin(a) * 1.05f);
+                d = Mathf.Min(d, Mathf.Min(DistToSegment(p, top, mid), DistToSegment(p, mid, end)));
+                // короткая веточка от середины
+                var twig = mid + new Vector2(Mathf.Cos(a + 0.6f), Mathf.Sin(a + 0.6f)) * 0.22f;
+                d = Mathf.Min(d, DistToSegment(p, mid, twig));
+            }
+            float w = 0.013f;
+            if (d > w + 0.02f) return Color.clear;
+            float alpha = d < w ? 1f : 1f - (d - w) / 0.02f;
+            // к краю купола жилки тоньше и тусклее
+            alpha *= Mathf.Lerp(1f, 0.5f, Mathf.Clamp01(Vector2.Distance(p, top) / 1.3f));
+            return new Color(1f, 1f, 1f, alpha);
+        }, size: JellySize / 2);
     }
 }

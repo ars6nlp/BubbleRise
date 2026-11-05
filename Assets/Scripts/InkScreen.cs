@@ -16,9 +16,12 @@ namespace BubbleRise
     ///    ищет стража, которого зашвырнуло в угол.
     ///
     /// Два слоя, а не один: сплошная подложка гарантирует, что между кляксами не
-    /// останется просветов, а кляксы поверх неё дают неровный край. Подложка уходит
-    /// вдвое быстрее, поэтому хвост растворения — это уже рваные пятна, а не
-    /// равномерно светлеющий прямоугольник.
+    /// останется просветов, а кляксы поверх неё дают рваный край на нарастании и
+    /// растворении. В удержании экран ровно закрыт на потолок inkBlackoutAlpha
+    /// (0.97), кляксы выключены — двадцать лишних спрайтов на почти чёрном экране
+    /// ничего не добавляли. Вместе слои не темнее потолка. Оба фронта — по SmoothStep:
+    /// нарастание inkRiseTime (0.3–0.5 с), затухание inkFadeTime (0.6–0.8 с), без
+    /// ступеньки за кадр. Пузырёк и страж видны по контуру (InkBossController).
     /// </summary>
     public class InkScreen : MonoBehaviour
     {
@@ -27,6 +30,13 @@ namespace BubbleRise
         const int Columns = 4;
         const int Rows = 5;
         const int Count = Columns * Rows;
+
+        /// <summary>
+        /// Сколько клякс может лечь на одну точку экрана. По раскладке сетки и
+        /// кромке кляксы — в портрете до 6, в альбомном до 7; с запасом на
+        /// капли-спутники — 8 (считает Tools/check_bosses.py).
+        /// </summary>
+        const int MaxOverlap = 8;
 
         readonly SpriteRenderer[] _splats = new SpriteRenderer[Count];
         readonly float[] _delay = new float[Count];
@@ -42,11 +52,11 @@ namespace BubbleRise
         float _rise = 1f;     // нарастание заливки, 0…1
 
         /// <summary>
-        /// За сколько чернила закрывают экран, с. Раньше — за один кадр:
-        /// средняя яркость падала на 72 % ступенькой на весь экран (E-11).
-        /// Время входит в удержание: экран закрыт столько же, сколько раньше.
+        /// За сколько облако чернил расходится по экрану, с (inkRiseTime). Раньше —
+        /// за один кадр: средняя яркость падала на 72 % ступенькой (E-11). Время
+        /// входит в удержание: экран закрыт столько же, сколько раньше.
         /// </summary>
-        public const float RiseTime = 0.2f;
+        float _riseTime = 0.4f;
 
         /// <summary>Насколько плотно закрыт экран: 0 — чисто, 1 — глухая заливка.</summary>
         public float Coverage { get; private set; }
@@ -55,6 +65,7 @@ namespace BubbleRise
         {
             _field = field;
             _peakAlpha = Mathf.Clamp01(cfg.inkBlackoutAlpha);
+            _riseTime = Mathf.Max(0.3f, cfg.inkRiseTime);
 
             // Родитель — камера: чернила должны остаться на стекле, а не уплыть с миром.
             transform.SetParent(cameraTransform, false);
@@ -127,13 +138,22 @@ namespace BubbleRise
             Apply(0f, 0f);
         }
 
+        /// <summary>
+        /// Снять удержание: чернила сразу начинают сходить (после нарастания, если
+        /// оно ещё идёт) — за обычное время растворения, без рывка.
+        /// </summary>
+        public void EndHold()
+        {
+            if (_active) _hold = 0f;
+        }
+
         public void Tick(float dt)
         {
             if (!_active) return;
 
             if (_rise < 1f)
             {
-                _rise = Mathf.Min(1f, _rise + dt / RiseTime);
+                _rise = Mathf.Min(1f, _rise + dt / _riseTime);
                 _hold -= dt;
                 float r = Mathf.SmoothStep(0f, 1f, _rise);
                 Apply(r, r);
@@ -149,9 +169,12 @@ namespace BubbleRise
 
             _elapsed += dt;
 
-            // Подложка уходит вдвое быстрее клякс — хвост растворения получается рваным.
-            float baseK = 1f - Mathf.Clamp01(_elapsed / (_fade * 0.5f));
-            float splatK = 1f - Mathf.Clamp01(_elapsed / _fade);
+            // Оба слоя сходят за всё время растворения по SmoothStep: прежде подложка
+            // уходила линейно вдвое быстрее (0.3 с) — фронт короче правила 0.6–0.8 с.
+            // Рваный хвост дают задержки клякс.
+            float fade = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(_elapsed / _fade));
+            float baseK = 1f - fade;
+            float splatK = 1f - fade;
 
             if (baseK <= 0f && splatK <= 0f) { Clear(); return; }
 
@@ -160,8 +183,18 @@ namespace BubbleRise
 
         void Apply(float baseK, float splatK)
         {
-            _base.enabled = baseK > 0f;
-            if (_base.enabled) _base.color = InkColor(_peakAlpha * baseK);
+            float b = _peakAlpha * baseK;
+            _base.enabled = b > 0f;
+            if (_base.enabled) _base.color = InkColor(b);
+
+            // Кляксы лежат на подложке и друг на друге. Раньше у каждой была та же
+            // альфа, что у подложки: под двумя кляксами экран закрывался на
+            // 1 − 0.12³ ≈ 0.998, и пузырька в темноте не было видно вовсе. Теперь
+            // клякса берёт свою долю остатка до потолка: даже MaxOverlap слоёв
+            // разом не темнее _peakAlpha. На удержании остатка нет, экран ровно
+            // закрыт на потолок; на растворении кляксы дают рваный край.
+            float room = b >= _peakAlpha ? 0f
+                : 1f - Mathf.Pow((1f - _peakAlpha) / (1f - b), 1f / MaxOverlap);
 
             float splatSum = 0f;
             for (int i = 0; i < Count; i++)
@@ -171,8 +204,9 @@ namespace BubbleRise
                 splatSum += k;
 
                 var sr = _splats[i];
-                if (k <= 0f) sr.enabled = false;
-                else { sr.enabled = true; sr.color = InkColor(_peakAlpha * k); }
+                float a = room * k;
+                if (a <= 0.002f) sr.enabled = false;
+                else { sr.enabled = true; sr.color = InkColor(a); }
             }
 
             Coverage = Mathf.Max(baseK, splatSum / Count);

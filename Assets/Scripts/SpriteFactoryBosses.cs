@@ -10,22 +10,93 @@ namespace BubbleRise
     public static partial class SpriteFactory
     {
         // ------------------------------------------------------- змей бездны
+        //
+        // Два этапа — два набора спрайтов. На втором тело темнее, шипы длиннее,
+        // в трещинах пластин тускло тлеют раны, на хвосте — костяное лезвие.
+        // Переход между наборами плавный: контроллер проявляет второй поверх
+        // первого, а не подменяет за кадр.
+        //
+        // Разрешение 160 вместо 128 и сглаживание 2×2: деталей стало больше
+        // (чешуя, трещины, точки свечения), а прогрев не должен заметно вырасти.
+
+        /// <summary>Сторона спрайтов змея в пикселях.</summary>
+        const int SerpentRes = 160;
+
+        static float SerpentHash(int x, int y)
+        {
+            int h = x * 374761393 + y * 668265263;
+            h = (h ^ (h >> 13)) * 1274126177;
+            return ((h ^ (h >> 16)) & 0x7fffffff) / (float)0x7fffffff;
+        }
+
+        /// <summary>
+        /// Чешуя: ячейки со смещёнными рядами. Возвращает 0 в середине чешуйки и 1 у
+        /// её края — по этому числу кромка темнеет, и поверхность читается рельефной.
+        /// </summary>
+        static float SerpentScale(Vector2 p, float density)
+        {
+            float v = p.y * density;
+            int row = Mathf.FloorToInt(v);
+            float u = p.x * density + (row & 1) * 0.5f;
+            int col = Mathf.FloorToInt(u);
+            float fu = u - col - 0.5f, fv = v - row - 0.5f;
+            return Mathf.Clamp01(Mathf.Sqrt(fu * fu * 1.4f + fv * fv * 2.2f) * 1.45f);
+        }
+
+        /// <summary>Излом трещины: середина отрезка, сдвинутая хешем. Считается один раз на спрайт.</summary>
+        static Vector2 SerpentKink(Vector2 a, Vector2 b, int seed)
+            => Vector2.Lerp(a, b, 0.5f) + new Vector2(SerpentHash(seed, 1) - 0.5f, SerpentHash(seed, 2) - 0.5f) * 0.14f;
+
+        /// <summary>Тонкая ломаная трещина: расстояние до неё, 0 — на самой линии.</summary>
+        static float SerpentCrack(Vector2 p, Vector2 a, Vector2 m, Vector2 b)
+            => Mathf.Min(DistToSegment(p, a, m), DistToSegment(p, m, b));
+
+        static readonly Color SerpentGlowDot = Palette.Hex("3FD8C8");   // холодные точки по бокам
+        static readonly Color SerpentWound   = Palette.Hex("A8382A");   // тусклое тление ран, сумма 1.04
+        static readonly Color SerpentSlime   = Palette.Hex("9DB39A");   // слизь на зубах
+        static readonly Color SerpentBone    = Palette.Hex("948A76");   // костяной шип и лезвие: тусклая кость, на тёмной воде не светит
+        static readonly Color SerpentTooth   = Palette.Hex("C9C0B4");   // зубы, сумма 2.24
+
+        /// <summary>Тело второго этапа темнее: множитель цвета чешуи.</summary>
+        const float SerpentStage2Dark = 0.72f;
+
+        static Color SerpentSkin(Vector2 p, float bellyFrom, float bellyTo, int stage)
+        {
+            Color body = Palette.SerpentBody, belly = Palette.SerpentBelly;
+            if (stage >= 2)
+            {
+                body *= SerpentStage2Dark;
+                belly *= SerpentStage2Dark;
+            }
+            Color c = Color.Lerp(belly, body, Mathf.InverseLerp(bellyFrom, bellyTo, p.y));
+            // градиент чешуи: каждая чешуйка светлее к центру и темнее к кромке
+            float edge = SerpentScale(p, 7f);
+            c = Color.Lerp(c, c * 0.62f, Mathf.SmoothStep(0.55f, 1f, edge) * Mathf.InverseLerp(-0.55f, 0.15f, p.y));
+            c.a = 1f;
+            return c;
+        }
 
         /// <summary>Голова змея, смотрит в +X (по направлению движения).</summary>
-        public static Sprite SerpentHead(bool mask) => Build(MaskKey("serpent_head", mask), p =>
+        public static Sprite SerpentHead(int stage, bool mask)
         {
-            Color body = Palette.SerpentBody;
-            Color belly = Palette.SerpentBelly;
-            Color spine = Palette.SerpentSpine;
+            Vector2 c1a = new Vector2(-0.45f, 0.30f), c1b = new Vector2(-0.12f, 0.12f), c1m = SerpentKink(c1a, c1b, 3);
+            Vector2 c2a = new Vector2(0.05f, 0.33f), c2b = new Vector2(0.22f, 0.14f), c2m = SerpentKink(c2a, c2b, 7);
+            return BuildRectTwin(MaskKey("serpent_head_s" + Mathf.Clamp(stage, 1, 2), mask), SerpentRes, SerpentRes, p =>
+        {
+            Color spine = stage >= 2 ? Palette.SerpentSpine * 0.82f : Palette.SerpentSpine;
+            spine.a = 1f;
 
-            // гребень на затылке
+            // гребень на затылке; на втором этапе длиннее и с костяным основанием
             for (int i = 0; i < 3; i++)
             {
-                float x0 = -0.42f + i * 0.35f;
-                float h = 0.78f - i * 0.09f;
-                if (InTriangle(p, new Vector2(x0 - 0.11f, 0.30f), new Vector2(x0 + 0.11f, 0.30f),
-                                  new Vector2(x0 - 0.10f, h)))
-                    return spine;
+                float x0 = -0.42f + i * 0.33f;
+                float h = (stage >= 2 ? 0.95f : 0.78f) - i * 0.09f;
+                if (InTriangle(p, new Vector2(x0 - 0.11f, 0.28f), new Vector2(x0 + 0.11f, 0.28f),
+                                  new Vector2(x0 - 0.12f, h)))
+                {
+                    // кончик шипа темнее основания — гребень не плоский
+                    return Color.Lerp(spine, spine * 0.6f, Mathf.InverseLerp(0.3f, h, p.y)).WithAlpha(1f);
+                }
             }
 
             // череп: эллипс с вытянутой мордой
@@ -34,10 +105,9 @@ namespace BubbleRise
             float ey = p.y / (0.50f * taper);
             if (ex * ex + ey * ey > 1f) return Color.clear;
 
-            Color c = Color.Lerp(belly, body, Mathf.InverseLerp(-0.45f, 0.35f, p.y));
-            c.a = 1f;
+            Color c = SerpentSkin(p, -0.45f, 0.35f, stage);
 
-            // пасть с зубами
+            // пасть с зубами и слизью
             if (p.x > 0.18f && p.y < -0.02f && p.y > -0.34f)
             {
                 c = Palette.BossMaw;
@@ -45,14 +115,35 @@ namespace BubbleRise
                 {
                     float x0 = 0.26f + i * 0.16f;
                     if (InTriangle(p, new Vector2(x0 - 0.045f, -0.02f), new Vector2(x0 + 0.045f, -0.02f),
-                                      new Vector2(x0, -0.20f)))
-                        c = Palette.BossTeeth;
+                                      new Vector2(x0, -0.21f)))
+                        c = SerpentTooth;
+                    // нить слизи с кончика зуба
+                    if (Mathf.Abs(p.x - x0) < 0.012f && p.y < -0.18f && p.y > -0.28f - 0.03f * i)
+                        c = Blend(c, SerpentSlime.WithAlpha(0.75f));
                 }
                 return c;
             }
 
-            // Глаз со щелевидным зрачком, утопленный в тёмную глазницу. Раньше он
-            // был просто жёлтым кружком, и морда выходила скорее любопытной, чем злой.
+            // панцирная пластина на темени с трещинами
+            if (p.y > 0.08f && Mathf.Abs(p.x + 0.1f) < 0.42f)
+            {
+                c = Blend(c, new Color(0f, 0f, 0f, 0.12f));
+                float crack = Mathf.Min(SerpentCrack(p, c1a, c1m, c1b), SerpentCrack(p, c2a, c2m, c2b));
+                if (crack < 0.018f)
+                    c = stage >= 2 ? Blend(c, SerpentWound.WithAlpha(0.9f)) : Blend(c, new Color(0f, 0f, 0f, 0.55f));
+                else if (stage >= 2 && crack < 0.05f)
+                    c = Blend(c, SerpentWound.WithAlpha(0.35f * (1f - crack / 0.05f)));
+            }
+
+            // холодные точки свечения вдоль боковой линии
+            for (int i = 0; i < 4; i++)
+            {
+                var dot = new Vector2(-0.62f + i * 0.2f, -0.12f + 0.02f * i);
+                float dd = Vector2.Distance(p, dot);
+                if (dd < 0.045f) c = Blend(c, SerpentGlowDot.WithAlpha(0.85f * (1f - dd / 0.045f) + 0.15f));
+            }
+
+            // Глаз со щелевидным зрачком, утопленный в тёмную глазницу.
             float de = Vector2.Distance(p, new Vector2(0.16f, 0.16f));
             if (de < 0.24f) c = Blend(c, new Color(0f, 0f, 0f, 0.55f * (1f - de / 0.24f)));
             if (de < 0.17f)
@@ -63,6 +154,8 @@ namespace BubbleRise
                 float px = (p.x - 0.16f) / 0.05f;
                 float py = (p.y - 0.16f) / 0.12f;
                 if (px * px + py * py <= 1f) c = new Color(0.05f, 0.03f, 0.05f, 1f);
+                // влажный блик
+                if (Vector2.Distance(p, new Vector2(0.12f, 0.22f)) < 0.03f) c = Color.Lerp(c, iris * 1.2f, 0.6f).WithAlpha(1f);
                 return c;
             }
 
@@ -71,63 +164,124 @@ namespace BubbleRise
                 c = Blend(c, new Color(0f, 0f, 0f, 0.5f));
 
             return c;
-        });
+        }, 2);
+        }
 
         /// <summary>Звено тела змея. Ориентировано так, что +X смотрит в сторону головы.</summary>
-        public static Sprite SerpentBody(int variant, bool mask)
+        public static Sprite SerpentBody(int variant, int stage, bool mask)
         {
             variant = Mathf.Clamp(variant, 0, 1);
-            string key = MaskKey("serpent_body_" + variant, mask);
+            stage = Mathf.Clamp(stage, 1, 2);
+            string key = MaskKey("serpent_body_" + variant + "_s" + stage, mask);
+            Vector2 ca = new Vector2(-0.40f + variant * 0.1f, 0.55f), cb = new Vector2(0.18f, 0.18f);
+            Vector2 cm = SerpentKink(ca, cb, 11 + variant);
 
-            return Build(key, p =>
+            return BuildRectTwin(key, SerpentRes, SerpentRes, p =>
             {
-                Color body = Palette.SerpentBody;
-                Color belly = Palette.SerpentBelly;
-                Color spine = Palette.SerpentSpine;
+                Color spine = stage >= 2 ? Palette.SerpentSpine * 0.82f : Palette.SerpentSpine;
+                spine.a = 1f;
 
-                // спинной шип
-                float spikeTop = variant == 0 ? 0.98f : 0.88f;
+                // спинной шип; на втором этапе вдвое длиннее, у основания кость
+                float spikeTop = stage >= 2 ? (variant == 0 ? 0.98f : 0.90f) : (variant == 0 ? 0.80f : 0.72f);
+                float spikeLean = stage >= 2 ? -0.16f : -0.06f;
                 if (InTriangle(p, new Vector2(-0.20f, 0.45f), new Vector2(0.20f, 0.45f),
-                                  new Vector2(-0.06f, spikeTop)))
-                    return spine;
+                                  new Vector2(spikeLean, spikeTop)))
+                {
+                    if (stage >= 2 && p.y < 0.58f) return SerpentBone;
+                    return Color.Lerp(spine, spine * 0.62f, Mathf.InverseLerp(0.45f, spikeTop, p.y)).WithAlpha(1f);
+                }
 
                 // боковой плавник
                 if (InTriangle(p, new Vector2(-0.30f, -0.20f), new Vector2(0.05f, -0.30f),
                                   new Vector2(-0.55f, -0.85f)))
-                    return Color.Lerp(spine, body, 0.45f);
+                    return Color.Lerp(spine, Palette.SerpentBody, 0.5f).WithAlpha(1f);
 
                 float d = p.magnitude;
                 if (d > 0.72f) return Color.clear;
 
-                Color c = Color.Lerp(belly, body, Mathf.InverseLerp(-0.6f, 0.4f, p.y));
-                c.a = 1f;
+                Color c = SerpentSkin(p, -0.6f, 0.4f, stage);
 
-                // кольцевая насечка чешуи
-                if (variant == 1 && Mathf.Abs(p.x) < 0.18f) c = Blend(c, new Color(0f, 0f, 0f, 0.18f));
-                if (d > 0.62f) c = Blend(c, new Color(0f, 0f, 0f, 0.20f));
+                // панцирная пластина на спине с трещиной
+                if (p.y > 0.12f)
+                {
+                    c = Blend(c, new Color(0f, 0f, 0f, 0.10f));
+                    float crack = SerpentCrack(p, ca, cm, cb);
+                    if (crack < 0.02f)
+                        c = stage >= 2 ? Blend(c, SerpentWound.WithAlpha(0.9f)) : Blend(c, new Color(0f, 0f, 0f, 0.5f));
+                    else if (stage >= 2 && crack < 0.06f)
+                        c = Blend(c, SerpentWound.WithAlpha(0.32f * (1f - crack / 0.06f)));
+                }
 
+                // кольцевая насечка и тёмная кромка звена
+                if (variant == 1 && Mathf.Abs(p.x) < 0.16f) c = Blend(c, new Color(0f, 0f, 0f, 0.16f));
+                if (d > 0.62f) c = Blend(c, new Color(0f, 0f, 0f, 0.22f));
+
+                // две холодные точки на боку
+                for (int i = 0; i < 2; i++)
+                {
+                    var dot = new Vector2(-0.22f + i * 0.36f, -0.18f);
+                    float dd = Vector2.Distance(p, dot);
+                    if (dd < 0.05f) c = Blend(c, SerpentGlowDot.WithAlpha(0.8f * (1f - dd / 0.05f) + 0.15f));
+                }
+
+                // рана второго этапа: тёмное пятно с тлеющей серединой
+                if (stage >= 2 && variant == 0)
+                {
+                    float dw = Vector2.Distance(p, new Vector2(0.18f, -0.02f));
+                    if (dw < 0.12f) c = Blend(c, new Color(0.05f, 0.02f, 0.03f, 0.75f * (1f - dw / 0.12f)));
+                    if (dw < 0.05f) c = Blend(c, SerpentWound.WithAlpha(0.6f * (1f - dw / 0.05f)));
+                }
                 return c;
-            });
+            }, 2);
         }
 
-        /// <summary>Хвостовой плавник: +X смотрит в сторону тела.</summary>
-        public static Sprite SerpentTail(bool mask) => Build(MaskKey("serpent_tail", mask), p =>
+        /// <summary>
+        /// Хвост: +X смотрит в сторону тела. На первом этапе плавник с маленьким
+        /// костяным шипом, на втором — утяжелённое звено с костяным лезвием: им
+        /// змей и хлещет. Хитбокс удара — круг по самому лезвию.
+        /// </summary>
+        public static Sprite SerpentTail(int stage, bool mask) => BuildRectTwin(
+            MaskKey("serpent_tail_s" + Mathf.Clamp(stage, 1, 2), mask), SerpentRes, SerpentRes, p =>
         {
-            Color body = Palette.SerpentBody;
-            Color spine = Palette.SerpentSpine;
+            Color body = stage >= 2 ? Palette.SerpentBody * SerpentStage2Dark : Palette.SerpentBody;
+            body.a = 1f;
+            Color spine = stage >= 2 ? Palette.SerpentSpine * 0.82f : Palette.SerpentSpine;
+            spine.a = 1f;
 
-            // плавник уходит назад
-            if (InTriangle(p, new Vector2(0.15f, 0f), new Vector2(-0.95f, 0.62f), new Vector2(-0.95f, -0.62f)))
-                return Color.Lerp(spine, body, 0.55f);
+            if (stage >= 2)
+            {
+                // лезвие: изогнутый серп из кости, тёмная кромка по краю
+                float bx = -p.x;                                     // 0 у основания, 1 у острия
+                float curve = 0.18f * bx * bx;
+                float half = Mathf.Lerp(0.30f, 0.0f, Mathf.InverseLerp(-0.1f, 0.98f, bx));
+                float dy = p.y - curve;
+                if (bx > -0.1f && bx < 0.98f && Mathf.Abs(dy) < half)
+                {
+                    Color bone = SerpentBone;
+                    if (Mathf.Abs(dy) > half - 0.035f) bone = bone * 0.55f;   // кромка
+                    bone = Color.Lerp(bone, bone * 0.78f, SerpentScale(p, 9f) * 0.5f);
+                    bone.a = 1f;
+                    return bone;
+                }
+            }
+            else
+            {
+                // плавник уходит назад, на конце маленький костяной шип
+                if (InTriangle(p, new Vector2(0.15f, 0f), new Vector2(-0.95f, 0.62f), new Vector2(-0.95f, -0.62f)))
+                    return Color.Lerp(spine, body, 0.55f).WithAlpha(1f);
+                if (InTriangle(p, new Vector2(-0.2f, 0.08f), new Vector2(-0.2f, -0.08f), new Vector2(-0.75f, 0f)))
+                    return SerpentBone;
+            }
 
             float d = Vector2.Distance(p, new Vector2(0.35f, 0f));
             if (d > 0.52f) return Color.clear;
 
-            Color c = body;
-            c.a = 1f;
+            Color c = SerpentSkin(p - new Vector2(0.35f, 0f), -0.5f, 0.4f, stage);
             if (p.y < -0.15f) c = Blend(c, new Color(0f, 0f, 0f, 0.18f));
+            if (stage >= 2 && Vector2.Distance(p, new Vector2(0.30f, 0.10f)) < 0.05f)
+                c = Blend(c, SerpentWound.WithAlpha(0.6f));
             return c;
-        });
+        }, 2);
 
         // -------------------------------------------- прицельные индикаторы
 
@@ -153,6 +307,18 @@ namespace BubbleRise
             if (d < 0.20f) return new Color(1f, 1f, 1f, 0.45f);
             return Color.clear;
         });
+
+        /// <summary>
+        /// Штрих пунктира телеграфа: капсула с мягкими краями, тинтуется цветом.
+        /// Из таких штрихов складываются дуга удара хвостом и кольцо змея.
+        /// </summary>
+        public static Sprite TelegraphDash() => BuildRect("tele_dash", 48, 16, p =>
+        {
+            float x = Mathf.Abs(p.x), y = Mathf.Abs(p.y) * 3f;
+            float d = x > 0.66f ? Vector2.Distance(new Vector2(x, y), new Vector2(0.66f, 0f)) : y;
+            float a = Mathf.SmoothStep(1f, 0f, Mathf.InverseLerp(0.22f, 0.33f, d));
+            return a <= 0.01f ? Color.clear : new Color(1f, 1f, 1f, a);
+        }, 3);
 
         // ------------------------------------------------------ спрут глубин
 

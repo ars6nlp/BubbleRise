@@ -89,18 +89,39 @@ namespace BubbleRise
 
         readonly List<BossProjectile> _live = new List<BossProjectile>();
         readonly Stack<BossProjectile> _pool = new Stack<BossProjectile>();
+        /// <summary>Разряды после удара: гаснут StormFadeOut и только потом в пул.</summary>
+        readonly List<BossProjectile> _fading = new List<BossProjectile>();
+
+        FxManager _fx;
+        SpriteRenderer _veins;        // жилки купола: по ним бежит свет телеграфа
+        SpriteRenderer _aimRing;      // мягкое кольцо в точке прицела
+        SpriteRenderer[] _impactRings;
+        float[] _impactAge;
+        float _veinsShown;
+        float _aimShown;
+        float _aimScale = 1f;
+        Vector2 _aimAt;
+        float _trailClock;
+        float _sparkClock;
+
+        /// <summary>Кольцо прицела: прозрачность не выше этой.</summary>
+        const float AimRingAlpha = 0.45f;
+        /// <summary>Кольцо всплеска при попадании живёт столько, с.</summary>
+        const float ImpactTime = 0.35f;
 
         float _timer;
         float _shootTimer;
         float _targetY;
 
-        public void Init(GameConfig cfg, Playfield field, BubbleController bubble, GuardianOrb guardian, Transform projectileRoot)
+        public void Init(GameConfig cfg, Playfield field, BubbleController bubble, GuardianOrb guardian,
+                         Transform projectileRoot, FxManager fx)
         {
             _cfg = cfg;
             _field = field;
             _bubble = bubble;
             _guardian = guardian;
             _projectileRoot = projectileRoot;
+            _fx = fx;
 
             // Тело — отдельный узел: он сжимается при сокращении купола, а
             // сам объект босса остаётся носителем позиции и хитбокса, которые
@@ -115,6 +136,32 @@ namespace BubbleRise
             _sr = AddLayer("Bell", SpriteFactory.JellyBell(), SortingOrders.Boss, _body);
             _tint.Track(_sr);
             _ripple = AddLayer("Ripple", SpriteFactory.JellyRipple(), SortingOrders.JellyRipple, _body);
+            _veins = AddLayer("Veins", SpriteFactory.JellyVeins(), SortingOrders.JellyRipple, _body);
+            _veins.enabled = false;
+
+            // Кольцо прицела и кольца всплеска живут в мире, а не на куполе.
+            var aimGo = new GameObject("AimRing");
+            aimGo.transform.SetParent(_projectileRoot, false);
+            _aimRing = aimGo.AddComponent<SpriteRenderer>();
+            _aimRing.sprite = SpriteFactory.Ring();
+            _aimRing.sharedMaterial = SpriteFactory.Unlit;
+            _aimRing.sortingOrder = SortingOrders.Projectile - 1;
+            _aimRing.enabled = false;
+
+            _impactRings = new SpriteRenderer[3];
+            _impactAge = new float[3];
+            for (int i = 0; i < _impactRings.Length; i++)
+            {
+                var go = new GameObject("ImpactRing" + i);
+                go.transform.SetParent(_projectileRoot, false);
+                var sr = go.AddComponent<SpriteRenderer>();
+                sr.sprite = SpriteFactory.Ring();
+                sr.sharedMaterial = SpriteFactory.Unlit;
+                sr.sortingOrder = SortingOrders.Projectile;
+                sr.enabled = false;
+                _impactRings[i] = sr;
+                _impactAge[i] = ImpactTime;
+            }
             _eye = AddLayer("Eye", SpriteFactory.JellyEye(), SortingOrders.JellyEye, _body);
             // 0.33, а не 0.42: при 0.42 глаз закрывал купол целиком, и ни
             // жилок, ни органов видно не было. [ТЕСТ]
@@ -221,6 +268,10 @@ namespace BubbleRise
             _fieldAlpha = 0.07f;
             _eyeAim = 0f;
             _telegraph = 0f;
+            _veinsShown = 0f;
+            _aimShown = 0f;
+            if (_veins != null) _veins.enabled = false;
+            if (_aimRing != null) _aimRing.enabled = false;
 
             // КОРНЕВАЯ ПРИЧИНА «босс виден не целиком».
             //
@@ -228,6 +279,7 @@ namespace BubbleRise
             // раньше не сбрасывал. Во втором бою (и в каждом следующем) купол,
             // свечение и глаз рисовались с альфой ноль — на экране оставались
             // только щупальца и дымка, которым альфу возвращали отдельно.
+            // Подтверждено кадром: _audit_scratch/rep/rep_108_seq_j_again2_f60.png
             _bodyAlpha = 1f;
             _age = 0f;
             _reach = 0f;
@@ -279,6 +331,8 @@ namespace BubbleRise
             }
 
             TickProjectiles(dt);
+            TickTelegraphLook(dt);
+            TickImpacts(dt);
         }
 
         void TickEnter(float dt)
@@ -353,6 +407,7 @@ namespace BubbleRise
             _glowWant = Mathf.Lerp(0.3f, 1f, _telegraph);
             _arms.SetPull(Mathf.Lerp(1f, 0.72f, _telegraph));
             _arms.SetTremble(_telegraph);
+            if (_telegraph > 0f) _aimAt = _bubble.Center;
 
             TickLook(dt, rage);
         }
@@ -421,7 +476,8 @@ namespace BubbleRise
 
             // Взгляд фиксируется: на подготовке глаз доворачивается вдвое
             // быстрее, иначе к выстрелу он не успевает поймать игрока.
-            _arms.SetReach(_reach, _eyeAim);
+            // На подготовке тонкие нити уже тянутся к цели, после выстрела — вслед.
+            _arms.SetReach(Mathf.Max(_reach, _telegraph * 0.55f), _eyeAim);
 
             _arms.Tick(dt);
         }
@@ -441,7 +497,8 @@ namespace BubbleRise
             float rage = MaxHp > 0 ? 1f - Hp / (float)MaxHp : 0f;
 
             Color bell = Color.Lerp(Color.white, SpriteFactory.JellyBio3, rage * 0.25f);
-            bell = Color.Lerp(bell, Color.white, 0f);
+            // Перед выстрелом купол темнеет: жилки на нём читаются лучше.
+            bell = Color.Lerp(bell, bell * 0.8f, _veinsShown);
             bell.a = _bodyAlpha;
             _sr.color = bell;
 
@@ -543,11 +600,129 @@ namespace BubbleRise
         {
             var p = RentProjectile();
             p.Activate(origin, direction.normalized * (_cfg.jellyBoltSpeed * speedScale), _cfg.jellyBoltRadius);
+            // Свечение на острие — 0.3 диаметра стража.
+            p.UseStormLook(0.3f * _guardian.Radius * 2f);
             _live.Add(p);
+        }
+
+        // ------------------------------------------------------ вид разрядов
+
+        /// <summary>
+        /// Жилки, кольцо прицела. Жилки разгораются вместе с телеграфом (0.75 с) и
+        /// гаснут за 0.35 с; свет «бежит» из макушки: слой растёт от 0.7 до 1.
+        /// Кольцо сужается к точке удара и после выстрела гаснет за 0.3 с.
+        /// </summary>
+        void TickTelegraphLook(float dt)
+        {
+            if (_veins == null) return;
+            _veinsShown = Mathf.MoveTowards(_veinsShown, CurrentPhase == Phase.Fight ? _telegraph : 0f, dt / 0.35f);
+            _veins.enabled = _veinsShown > 0.004f && _bodyAlpha > 0.01f;
+            if (_veins.enabled)
+            {
+                _veins.color = SpriteFactory.JellyBio1.WithAlpha(0.42f * _veinsShown * _bodyAlpha);
+                float spread = Mathf.Lerp(0.7f, 1f, _veinsShown);
+                _veins.transform.localScale = new Vector3(spread, spread, 1f);
+                _veins.transform.localPosition = new Vector3(0f, (1f - spread) * 0.25f, -0.001f);
+            }
+
+            float want = CurrentPhase == Phase.Fight ? Mathf.SmoothStep(0f, 1f, _telegraph) : 0f;
+            _aimShown = Mathf.MoveTowards(_aimShown, want, dt / 0.3f);
+            if (_telegraph > 0f) _aimScale = Mathf.Lerp(2.2f, 0.85f, _telegraph);
+            _aimRing.enabled = _aimShown > 0.004f;
+            if (_aimRing.enabled)
+            {
+                _aimRing.transform.position = new Vector3(_aimAt.x, _aimAt.y, 0f);
+                _aimRing.transform.localScale = Vector3.one * _aimScale;
+                _aimRing.color = SpriteFactory.StormBodyHostile.WithAlpha(AimRingAlpha * _aimShown);
+            }
+        }
+
+        /// <summary>
+        /// Всплеск попадания: 9 искр и мягкое кольцо, раскрывающееся за 0.35 с
+        /// (прозрачность 0 → 0.5 за 0.06 с, потом к нулю). Белого нет.
+        /// </summary>
+        void Impact(Vector2 at, bool reflected)
+        {
+            Color core = reflected ? SpriteFactory.StormCoreReflected : SpriteFactory.StormCoreHostile;
+            _fx?.Burst(at, core, 9, 0.4f, 1.6f, 0.03f, 0.06f);
+            int slot = 0;
+            for (int i = 1; i < _impactAge.Length; i++)
+                if (_impactAge[i] > _impactAge[slot]) slot = i;
+            _impactAge[slot] = 0f;
+            _impactRings[slot].transform.position = new Vector3(at.x, at.y, 0f);
+            _impactRings[slot].color = (reflected ? SpriteFactory.StormBodyReflected : SpriteFactory.StormBodyHostile).WithAlpha(0f);
+            _impactRings[slot].enabled = true;
+        }
+
+        void TickImpacts(float dt)
+        {
+            if (_impactRings == null) return;
+            for (int i = 0; i < _impactRings.Length; i++)
+            {
+                if (_impactAge[i] >= ImpactTime) { if (_impactRings[i].enabled) _impactRings[i].enabled = false; continue; }
+                _impactAge[i] += dt;
+                float k = Mathf.Clamp01(_impactAge[i] / ImpactTime);
+                const float rise = 0.06f / ImpactTime;
+                float a = k < rise ? Mathf.SmoothStep(0f, 1f, k / rise)
+                                   : 1f - Mathf.SmoothStep(0f, 1f, (k - rise) / (1f - rise));
+                var sr = _impactRings[i];
+                sr.transform.localScale = Vector3.one * Mathf.Lerp(0.35f, 0.95f, k);
+                var c = sr.color;
+                c.a = 0.5f * a;
+                sr.color = c;
+            }
+        }
+
+        /// <summary>
+        /// Шлейф и искры. Шлейф тонкий и вязкий — частицы с хвоста, живут 0.4 с;
+        /// искры с острия, живут 0.25–0.4 с. Чем больше разрядов в полёте, тем
+        /// реже каждый сыплет: в волне из восьми частиц не больше, чем у пары.
+        /// </summary>
+        void EmitTrails(float dt)
+        {
+            if (_fx == null || _live.Count == 0) return;
+            float load = Mathf.Max(1f, _live.Count / 3f);
+            _trailClock += dt;
+            _sparkClock += dt;
+            bool trail = _trailClock >= 0.12f * load;
+            bool spark = _sparkClock >= 0.24f * load;
+            if (trail) _trailClock = 0f;
+            if (spark) _sparkClock = 0f;
+            if (!trail && !spark) return;
+
+            for (int i = 0; i < _live.Count; i++)
+            {
+                var p = _live[i];
+                if (!p.Storm || p.Fading || p.Velocity.sqrMagnitude < 0.0001f) continue;
+                Vector2 dir = p.Velocity.normalized;
+                float half = p.Radius * 2f;
+                Color body = p.Reflected ? SpriteFactory.StormBodyReflected : SpriteFactory.StormBodyHostile;
+                Color core = p.Reflected ? SpriteFactory.StormCoreReflected : SpriteFactory.StormCoreHostile;
+                if (trail)
+                    _fx.Emit(p.Center - dir * half, -p.Velocity * 0.15f + UnityEngine.Random.insideUnitCircle * 0.1f,
+                             body, 0.4f, 0.05f, 0.4f, SortingOrders.Projectile - 1);
+                if (spark)
+                    _fx.Emit(p.Center + dir * half, UnityEngine.Random.insideUnitCircle.normalized * 1.0f,
+                             core, UnityEngine.Random.Range(0.25f, 0.4f), 0.03f, 0.7f);
+            }
         }
 
         void TickProjectiles(float dt)
         {
+            // Погасающие после удара: стоят на месте и уходят в пул по готовности.
+            for (int i = _fading.Count - 1; i >= 0; i--)
+            {
+                var f = _fading[i];
+                f.Tick(dt, _field);
+                if (f.FadedOut)
+                {
+                    _fading.RemoveAt(i);
+                    RecycleProjectile(f);
+                }
+            }
+
+            EmitTrails(dt);
+
             for (int i = _live.Count - 1; i >= 0; i--)
             {
                 // Колбэки ниже (BubbleHit -> game over) могут почистить список прямо во время цикла.
@@ -569,13 +744,18 @@ namespace BubbleRise
                         if (toBoss.sqrMagnitude < 0.0001f) toBoss = Vector2.up;
                         p.Reflect(toBoss, _cfg.jellyReflectSpeed);
                         _guardian.NotifyDeflect();
+                        // лёгкий всплеск искр в точке отражения, без вспышки
+                        _fx?.Burst(p.Center, SpriteFactory.StormCoreReflected, 8, 0.3f, 1.3f, 0.03f, 0.06f);
                         GuardianBlocked?.Invoke(p.Center);
                     }
                     // попадание по пузырьку
                     else if (Vector2.Distance(p.Center, _bubble.Center) < p.Radius + _bubble.Radius)
                     {
+                        Impact(p.Center, false);
                         BubbleHit?.Invoke(p.Center);
-                        alive = false;
+                        // проигрыш мог уже всё убрать в пул — RetireStruck это переживёт
+                        RetireStruck(p);
+                        continue;
                     }
                 }
                 else if (alive && p.Reflected && CurrentPhase == Phase.Fight)
@@ -583,8 +763,10 @@ namespace BubbleRise
                     // отражённый снаряд бьёт босса
                     if (Vector2.Distance(p.Center, transform.position) < p.Radius + _hitRadius)
                     {
-                        alive = false;
+                        Impact(p.Center, true);
+                        RetireStruck(p);
                         ApplyDamage();
+                        continue;
                     }
                 }
 
@@ -653,6 +835,26 @@ namespace BubbleRise
 
         /// <summary>Прозрачность тела. Ноль означает невидимого босса.</summary>
         public float DebugBodyAlpha => _bodyAlpha;
+
+        /// <summary>
+        /// Куда поставил бы стража игрок: на путь ближайшего враждебного разряда,
+        /// который летит уже не меньше 0.3 с (успел его увидеть). Для проверки в Unity.
+        /// </summary>
+        public bool DevBotTarget(out Vector2 target)
+        {
+            target = default;
+            float best = float.MaxValue;
+            Vector2 b = _bubble.Center;
+            for (int i = 0; i < _live.Count; i++)
+            {
+                var p = _live[i];
+                if (p.Reflected || p.Fading || p.Age < 0.3f) continue;
+                if (Vector2.Dot(p.Velocity, b - p.Center) <= 0f) continue;   // мимо, улетает
+                float d = Vector2.Distance(p.Center, b);
+                if (d < best) { best = d; target = b + (p.Center - b).normalized * Mathf.Min(1.1f, d); }
+            }
+            return best < float.MaxValue;
+        }
 #endif
 
         BossProjectile RentProjectile()
@@ -667,6 +869,17 @@ namespace BubbleRise
             var proj = go.AddComponent<BossProjectile>();
             proj.Setup();
             return proj;
+        }
+
+        /// <summary>Разряд попал: снять с живых и дать ему погаснуть, а не исчезнуть за кадр.</summary>
+        void RetireStruck(BossProjectile p)
+        {
+            int idx = _live.IndexOf(p);
+            if (idx >= 0) _live.RemoveAt(idx);
+            if (p == null || p.Pooled) return;
+            if (!p.Storm) { RecycleProjectile(p); return; }
+            p.BeginFadeOut();
+            if (!_fading.Contains(p)) _fading.Add(p);
         }
 
         void RecycleProjectile(BossProjectile p)
@@ -684,6 +897,8 @@ namespace BubbleRise
         {
             for (int i = 0; i < _live.Count; i++) RecycleProjectile(_live[i]);
             _live.Clear();
+            for (int i = 0; i < _fading.Count; i++) RecycleProjectile(_fading[i]);
+            _fading.Clear();
         }
 
         public void Despawn()
@@ -694,6 +909,8 @@ namespace BubbleRise
             if (_aura2 != null) _aura2.enabled = false;
             if (_haze != null) _haze.enabled = false;
             if (_arms != null) _arms.SetVisible(false);
+            if (_aimRing != null) _aimRing.enabled = false;
+            if (_impactRings != null) foreach (var r in _impactRings) r.enabled = false;
             gameObject.SetActive(false);
             CurrentPhase = Phase.Done;
         }
