@@ -23,6 +23,10 @@ namespace BubbleRise
         public SpriteRenderer Renderer => _sr;
 
         SpriteRenderer _sr;
+        // Хвост (у медузы — щупальца): ребёнок с опорой у корня, ходит волной вслед
+        // за телом. Рисуется под телом: тот же слой, чуть дальше по глубине.
+        SpriteRenderer _tail;
+        Color _tint = Color.white;
         Vector2 _velocity;
         float _speed;
         float _turnRate;
@@ -31,6 +35,12 @@ namespace BubbleRise
         float _phase;
         float _life;
         bool _leaving;
+        bool _fleeing;
+        Vector2 _fleeFrom;
+
+        /// <summary>Уже уплывает: в атаку больше не идёт.</summary>
+        public bool Leaving => _leaving;
+        public Vector2 Velocity => _velocity;
 
         float _fade, _fadeTime, _spin;
 
@@ -39,6 +49,13 @@ namespace BubbleRise
             _sr = gameObject.AddComponent<SpriteRenderer>();
             _sr.sharedMaterial = SpriteFactory.Unlit;
             _sr.sortingOrder = SortingOrders.Fish;
+
+            var tail = new GameObject("Tail");
+            tail.transform.SetParent(transform, false);
+            _tail = tail.AddComponent<SpriteRenderer>();
+            _tail.sharedMaterial = SpriteFactory.Unlit;
+            _tail.sortingOrder = SortingOrders.Fish;
+            _tail.enabled = false;
         }
 
         public FishType Type { get; private set; }
@@ -51,6 +68,7 @@ namespace BubbleRise
             Dying = false;
             Pooled = false;
             _leaving = false;
+            _fleeing = false;
             _speed = speed;
             _turnRate = turnRate;
             _wanderStrength = wanderStrength;
@@ -62,9 +80,27 @@ namespace BubbleRise
             if (direction.sqrMagnitude < 0.0001f) direction = Vector2.right;
             _velocity = direction.normalized * speed;
 
-            _sr.sprite = SpriteFactory.FishSprite(type);
-            _sr.color = Color.white;
+            // Тело и хвост отдельно: хвост качается сам. Оттенок — один из трёх на
+            // вид, от уже выпавшего _wanderSeed: лишний вызов Random сдвинул бы
+            // последовательность для всего, что появляется следом.
+            var tints = type == FishType.Piranha ? SpriteFactory.PiranhaTints
+                      : type == FishType.Lurker ? SpriteFactory.LurkerTints : SpriteFactory.JellyTints;
+            _tint = tints[(int)(_wanderSeed * 7.31f) % tints.Length];
+            _sr.sprite = SpriteFactory.FishBody(type);
+            _sr.color = _tint;
             _sr.flipY = false;
+
+            bool jelly = type == FishType.Jellyfish;
+            Vector2 root = jelly ? SpriteFactory.JellyTentacleRoot : SpriteFactory.FishTailRoot;
+            float span = jelly ? SpriteFactory.JellyTentacleSpan : SpriteFactory.FishTailSpan;
+            _tail.sprite = SpriteFactory.FishTail(type);
+            _tail.color = _tint;
+            _tail.flipY = false;
+            _tail.enabled = true;
+            // рисунок: 1 = Radius, локальная единица = диаметр; хвост чуть дальше — под телом
+            _tail.transform.localPosition = new Vector3(root.x * 0.5f, root.y * 0.5f, 0.01f);
+            _tail.transform.localRotation = Quaternion.identity;
+            _tail.transform.localScale = Vector3.one * (span * 0.5f);
 
             transform.position = position;
             // спрайт нарисован в квадрате [-1..1], где 1 == Radius: масштаб = диаметр
@@ -79,6 +115,10 @@ namespace BubbleRise
         public void Kill(Vector2 direction, float impulse)
         {
             Dying = true;
+            // Гибнет целиком одним спрайтом: накладка статуса копирует спрайт цели,
+            // и у горящей или замёрзшей рыбы хвост должен быть на месте.
+            _sr.sprite = SpriteFactory.FishSprite(Type);
+            _tail.enabled = false;
             _velocity = direction.normalized * impulse;
             _spin = Random.Range(-500f, 500f);
             _fade = _fadeTime = 0.55f;
@@ -112,6 +152,13 @@ namespace BubbleRise
                 float baseSize = Radius * 2f;
                 transform.localScale = new Vector3(baseSize / pulse, baseSize * pulse, 1f);
 
+                // Щупальца отстают от купола: тянутся, когда он сжимается, и
+                // медленно качаются вбок — цикл 3.7 с.
+                float lag = Mathf.Sin(_phase * 2.4f - 1.2f);
+                float half = SpriteFactory.JellyTentacleSpan * 0.5f;
+                _tail.transform.localScale = new Vector3(half, half * (1f - lag * 0.07f), 1f);
+                _tail.transform.localRotation = Quaternion.Euler(0f, 0f, Mathf.Sin(_phase * 1.7f + _wanderSeed) * 5f);
+
                 float jellyMargin = 2.5f;
                 return jp.y > field.Bottom - jellyMargin && jp.y < field.Top + jellyMargin &&
                        Mathf.Abs(jp.x) < field.HalfWidth + jellyMargin;
@@ -140,8 +187,26 @@ namespace BubbleRise
                 _velocity = Rotate(_velocity.normalized, delta) * _speed;
             }
 
+            // Уплывает от точки: разворачивается с той же скоростью поворота,
+            // а не разом — рыба не телепортирует курс.
+            if (_fleeing)
+            {
+                Vector2 away = (Vector2)transform.position - _fleeFrom;
+                if (away.sqrMagnitude < 0.0001f) away = Vector2.down;
+                float turn = Vector2.SignedAngle(_velocity, away) * Mathf.Deg2Rad;
+                float limit = _turnRate * 1.5f * dt;
+                _velocity = Rotate(_velocity.normalized, Mathf.Clamp(turn, -limit, limit)) * _speed;
+            }
+
             transform.position += (Vector3)(_velocity * dt);
             FaceVelocity();
+
+            // Хвост идёт волной вслед за телом: та же частота виляния, отставание
+            // на 1.3 рад и размах вдвое больше. Жабры «дышат» — 0.7 Гц, 1.8 % по высоте.
+            _tail.flipY = _sr.flipY;
+            _tail.transform.localRotation = Quaternion.Euler(0f, 0f, Mathf.Sin(_phase * 13f - 1.3f) * 16f);
+            float size = Radius * 2f;
+            transform.localScale = new Vector3(size, size * (1f + 0.018f * Mathf.Sin(_phase * 4.4f)), 1f);
 
             var p = transform.position;
             float margin = 2.5f;
@@ -162,6 +227,18 @@ namespace BubbleRise
         {
             float c = Mathf.Cos(radians), s = Mathf.Sin(radians);
             return new Vector2(v.x * c - v.y * s, v.x * s + v.y * c);
+        }
+
+        /// <summary>
+        /// Уплыть от точки и не атаковать. Нужен «Чернильному мороку»: рыба,
+        /// дошедшая до пузырька в темноте, бьёт из того, чего не видно (C-13).
+        /// </summary>
+        public void Flee(Vector2 from)
+        {
+            if (Dying || Type == FishType.Jellyfish) return;
+            _leaving = true;
+            _fleeing = true;
+            _fleeFrom = from;
         }
 
         public void Deactivate() => gameObject.SetActive(false);

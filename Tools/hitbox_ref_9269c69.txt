@@ -1,0 +1,29 @@
+fishRadius=0.3
+jellyfishRadius=0.42
+formationCellSize=0.6
+formationBlockRadius=0.29
+spireSegmentSize=0.8
+spireSegmentSpacing=0.75
+zoneBlobMinRadius=0.34
+zoneBlobMaxRadius=0.62
+guardianRadius=0.45
+bubbleRadius=0.28
+scale.Rock=1
+scale.Urchin=1
+scale.Coral=1
+scale.Spinner=1.15
+scale.Barnacle=1.1
+scale.Cinder=0.9
+scale.Anchor=1.2
+scale.Mine=1.05
+scale.Glowtrap=1.1
+scale.Vortex=1.3
+scale.Jaw=1.25
+bool HitsBubble(e032852b8a27d8a8
+void TickFish(23132921dcbe6563
+void TickZone(cfcb24ec5ae84106
+void TickSpires(bfe9864eaeeb2e8b
+void TickFormations(e99896722f4acfab
+void TickObstacles(f6ce48a50e9ad681
+fish.radius=True
+zone.blob=5d583d8fe9234f56

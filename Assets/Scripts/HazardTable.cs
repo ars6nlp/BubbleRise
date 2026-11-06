@@ -128,6 +128,9 @@ namespace BubbleRise
     /// </summary>
     public static class HazardTable
     {
+        // Tint у всех белый (A-04): рисунки видов уже раскрашены своими цветами,
+        // и второй, тот же цвет поверх них умножался на себя — мина, уголёк и
+        // воронка темнели до контраста 1.7:1 с водой вместо 2.4–3.8.
         public static readonly HazardStats[] All =
         {
             new HazardStats { Type = ObstacleType.Rock,     Motion = HazardMotion.Drift, Death = HazardDeath.Shards,
@@ -147,35 +150,35 @@ namespace BubbleRise
             // значит учить его тому, что страж не работает.
             new HazardStats { Type = ObstacleType.Spinner,  Motion = HazardMotion.Spin,  Death = HazardDeath.Shards,
                               Hp = 2, RewardMin = 3,  RewardMax = 6,  Scale = 1.15f, Speed = 0.95f, UnlockDepth = 400,  Weight = 0.95f,
-                              Tint = Palette.Hex("8FE3C8") },
+                              Tint = Color.white },
 
             new HazardStats { Type = ObstacleType.Barnacle, Motion = HazardMotion.Drift, Death = HazardDeath.Crumble,
                               Hp = 2, RewardMin = 3,  RewardMax = 6,  Scale = 1.1f,  Speed = 0.85f, UnlockDepth = 700,  Weight = 0.95f,
-                              Tint = Palette.Hex("C9B89A") },
+                              Tint = Color.white },
 
             new HazardStats { Type = ObstacleType.Cinder,   Motion = HazardMotion.Fast,  Death = HazardDeath.Dissolve,
                               Hp = 1, RewardMin = 2,  RewardMax = 5,  Scale = 0.9f,  Speed = 1.55f, UnlockDepth = 1200, Weight = 0.90f,
-                              Tint = Palette.Hex("FF8A4A") },
+                              Tint = Color.white },
 
             new HazardStats { Type = ObstacleType.Anchor,   Motion = HazardMotion.Swing, Death = HazardDeath.Shards,
                               Hp = 2, RewardMin = 4,  RewardMax = 8,  Scale = 1.2f,  Speed = 0.9f,  UnlockDepth = 1800, Weight = 0.85f, Dangerous = true,
-                              Tint = Palette.Hex("9AA7B4") },
+                              Tint = Color.white },
 
             new HazardStats { Type = ObstacleType.Mine,     Motion = HazardMotion.Drift, Death = HazardDeath.Blast,
                               Hp = 1, RewardMin = 5,  RewardMax = 9,  Scale = 1.05f, Speed = 0.95f, UnlockDepth = 2500, Weight = 0.80f, Dangerous = true,
-                              Tint = Palette.Hex("E05A4A") },
+                              Tint = Color.white },
 
             new HazardStats { Type = ObstacleType.Glowtrap, Motion = HazardMotion.Pulse, Death = HazardDeath.Dissolve,
                               Hp = 2, RewardMin = 5,  RewardMax = 9,  Scale = 1.1f,  Speed = 0.9f,  UnlockDepth = 3200, Weight = 0.80f, Dangerous = true,
-                              Tint = Palette.Hex("7BE8FF") },
+                              Tint = Color.white },
 
             new HazardStats { Type = ObstacleType.Vortex,   Motion = HazardMotion.Pull,  Death = HazardDeath.Implode,
                               Hp = 3, RewardMin = 7,  RewardMax = 12,  Scale = 1.3f,  Speed = 0.8f,  UnlockDepth = 4200, Weight = 0.70f, Dangerous = true,
-                              Tint = Palette.Hex("6E7BE8") },
+                              Tint = Color.white },
 
             new HazardStats { Type = ObstacleType.Jaw,      Motion = HazardMotion.Clamp, Death = HazardDeath.Shards,
                               Hp = 3, RewardMin = 8,  RewardMax = 14, Scale = 1.25f, Speed = 0.85f, UnlockDepth = 5500, Weight = 0.65f, Dangerous = true,
-                              Tint = Palette.Hex("D8C7A8") },
+                              Tint = Color.white },
         };
 
         public static HazardStats Of(ObstacleType type) => All[(int)type];

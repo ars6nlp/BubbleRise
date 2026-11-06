@@ -6,54 +6,87 @@ using UnityEngine.InputSystem;
 namespace BubbleRise
 {
     /// <summary>
-    /// Единая точка чтения указателя: мышь на ПК и палец в мобильном браузере.
-    /// Работает и на новой Input System (в проекте активна именно она), и на legacy —
-    /// код выбирается по дефайнам, так что переключение Active Input Handling ничего не ломает.
+    /// Единая точка чтения указателя: пальцы, мышь на ПК, перо — каждое касание
+    /// отдельно и со своим id (см. ReadContacts). Работает и на новой Input System
+    /// (в проекте активна именно она), и на legacy — код выбирается по дефайнам, так
+    /// что переключение Active Input Handling ничего не ломает.
     /// </summary>
     public static class PointerInput
     {
-        /// <summary>Экранные координаты указателя и признак нажатия.</summary>
-        public static bool TryRead(out Vector2 screenPos, out bool pressed)
-        {
-            screenPos = Vector2.zero;
-            pressed = false;
+        /// <summary>Как закончилось касание: идёт, отпущено, отменено системой.</summary>
+        public enum ContactPhase : byte { Active, Ended, Canceled }
 
+        /// <summary>
+        /// Одно касание: палец (свой id на всё время касания), зажатая кнопка мыши
+        /// или перо. Положение — экранные пиксели.
+        /// </summary>
+        public struct Contact
+        {
+            public int Id;
+            public Vector2 Screen;
+            public ContactPhase Phase;
+        }
+
+        /// <summary>Id мыши и пера — отрицательные, чтобы не совпасть с пальцами.</summary>
+        public const int MouseId = -1;
+        public const int PenId = -2;
+
+        /// <summary>
+        /// Все касания экрана по отдельности, каждое со своим id.
+        ///
+        /// TryRead отдаёт только «главное» касание платформы, и страж держался за
+        /// него: стоило системе на кадр отменить касание (ладонь, жест у края,
+        /// повторная выдача пальца под новым id), как «главного» не оставалось —
+        /// и страж уходил к пузырьку, пока палец всё ещё на стекле. Здесь страж
+        /// сам следит за своим пальцем по id. Закончившиеся касания тоже в списке
+        /// (Ended/Canceled) — чтобы понять, как именно ушёл палец.
+        /// </summary>
+        public static void ReadContacts(System.Collections.Generic.List<Contact> into)
+        {
+            into.Clear();
 #if ENABLE_INPUT_SYSTEM
             var touch = Touchscreen.current;
-            if (touch != null && touch.primaryTouch.press.isPressed)
+            if (touch != null)
             {
-                screenPos = touch.primaryTouch.position.ReadValue();
-                pressed = true;
-                return true;
+                var touches = touch.touches;
+                for (int i = 0; i < touches.Count; i++)
+                {
+                    var t = touches[i];
+                    var phase = t.phase.ReadValue();
+                    if (phase == UnityEngine.InputSystem.TouchPhase.None) continue;
+                    into.Add(new Contact
+                    {
+                        Id = t.touchId.ReadValue(),
+                        Screen = t.position.ReadValue(),
+                        Phase = phase == UnityEngine.InputSystem.TouchPhase.Ended ? ContactPhase.Ended
+                              : phase == UnityEngine.InputSystem.TouchPhase.Canceled ? ContactPhase.Canceled
+                              : ContactPhase.Active,
+                    });
+                }
             }
 
             var mouse = Mouse.current;
-            if (mouse != null)
-            {
-                screenPos = mouse.position.ReadValue();
-                pressed = mouse.leftButton.isPressed;
-                return true;
-            }
+            if (mouse != null && mouse.leftButton.isPressed)
+                into.Add(new Contact { Id = MouseId, Screen = mouse.position.ReadValue(), Phase = ContactPhase.Active });
 
-            var pointer = Pointer.current;
-            if (pointer != null)
-            {
-                screenPos = pointer.position.ReadValue();
-                pressed = pointer.press.isPressed;
-                return true;
-            }
-            return false;
+            var pen = Pen.current;
+            if (pen != null && pen.tip.isPressed)
+                into.Add(new Contact { Id = PenId, Screen = pen.position.ReadValue(), Phase = ContactPhase.Active });
 #else
-            if (Input.touchCount > 0)
+            for (int i = 0; i < Input.touchCount; i++)
             {
-                var t = Input.GetTouch(0);
-                screenPos = t.position;
-                pressed = t.phase != TouchPhase.Ended && t.phase != TouchPhase.Canceled;
-                return true;
+                var t = Input.GetTouch(i);
+                into.Add(new Contact
+                {
+                    Id = t.fingerId + 1,
+                    Screen = t.position,
+                    Phase = t.phase == TouchPhase.Ended ? ContactPhase.Ended
+                          : t.phase == TouchPhase.Canceled ? ContactPhase.Canceled
+                          : ContactPhase.Active,
+                });
             }
-            screenPos = Input.mousePosition;
-            pressed = Input.GetMouseButton(0);
-            return true;
+            if (Input.touchCount == 0 && Input.GetMouseButton(0))
+                into.Add(new Contact { Id = MouseId, Screen = Input.mousePosition, Phase = ContactPhase.Active });
 #endif
         }
 

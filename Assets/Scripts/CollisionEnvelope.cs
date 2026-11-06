@@ -138,6 +138,11 @@ namespace BubbleRise
         /// <summary>Куда тянется связь. По ней решается, та же это цель или новая.</summary>
         public Vector2 LinkAt => _linkAtWorld;
 
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        /// <summary>Корни всех оболочек в игре — счётчику «образов стража» (GuardianImageWatch).</summary>
+        public static readonly System.Collections.Generic.List<Transform> DebugRoots = new System.Collections.Generic.List<Transform>();
+#endif
+
         public void Init(Transform parent, float weight = 1f)
         {
             _weight = Mathf.Clamp01(weight);
@@ -145,6 +150,9 @@ namespace BubbleRise
             var go = new GameObject("CollisionEnvelope");
             go.transform.SetParent(parent, false);
             _root = go.transform;
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            DebugRoots.Add(_root);
+#endif
 
             var sprite = SpriteFactory.SoftDot();
 
@@ -391,7 +399,7 @@ namespace BubbleRise
 
                     Color c = dot.OnTarget ? _def.Accent : _def.Hot;
                     m.Sr.color = c.WithAlpha(Mathf.Clamp01(
-                        linkFade * fade * LinkAlpha * Visuals.EnvelopeAlpha));
+                        linkFade * fade * LinkAlpha * Visuals.EnvelopeAlpha * EnvelopeTable.Alpha(_def)));
                 }
                 else
                 {
@@ -399,7 +407,7 @@ namespace BubbleRise
                     // с альфой больше единицы тихо пробила бы потолок слоя, то
                     // есть главное правило безопасности для глаз.
                     m.Sr.color = s.Color.WithAlpha(Mathf.Clamp01(
-                        Mathf.Clamp01(s.Alpha) * fade * CeilingOf(layer) * Visuals.EnvelopeAlpha));
+                        Mathf.Clamp01(s.Alpha) * fade * CeilingOf(layer) * Visuals.EnvelopeAlpha * EnvelopeTable.Alpha(_def)));
                 }
             }
         }
@@ -412,7 +420,7 @@ namespace BubbleRise
         void PlaceRings(float fade)
         {
             var r = EnvelopeShape.Rings(_def, _age);
-            float a = fade * Visuals.EnvelopeAlpha;
+            float a = fade * Visuals.EnvelopeAlpha * EnvelopeTable.Alpha(_def);
 
             SetRing(_shadowRing, r.ShadowScale, _def.Edge,
                     r.ShadowAlpha * a * ShadowAlpha, _age * 0.35f);

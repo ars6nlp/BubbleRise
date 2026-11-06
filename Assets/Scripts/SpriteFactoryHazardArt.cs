@@ -10,10 +10,14 @@ namespace BubbleRise
     /// и главное — разные предметы выглядели сделанными из разного ничего. Здесь
     /// собраны общие приёмы, чтобы камень, якорь и мина были из одного мира:
     ///
-    /// * **Один источник света.** Сверху-слева, у всех. Это единственное, что
-    ///   превращает набор силуэтов в объёмные предметы на одной сцене.
-    /// * **Тень снизу-справа и отражённый свет по нижнему краю.** Второе важнее,
-    ///   чем кажется: без него тень читается как грязь, а не как объём.
+    /// * **Один источник света — в мире, а не в рисунке (D-17).** Препятствия
+    ///   поворачиваются и вращаются, и свет, запечённый «сверху-слева» в спрайт,
+    ///   приходил у каждого со своей стороны — обломки выглядели наклейками.
+    ///   Поэтому заливка здесь одинакова при любом повороте (купол: середина
+    ///   светлее, край темнее), а блик сверху-слева рисует Obstacle отдельным
+    ///   невращающимся слоем.
+    /// * **Отражённый свет по краю.** Вода подсвечивает кромку со всех сторон:
+    ///   без этого край читается как грязь, а не как объём.
     /// * **Обводка чуть темнее своего цвета, а не чёрная.** Чёрный контур на
     ///   тёмной воде превращает предмет в дырку.
     /// * **Фактура шумом.** Тот же value-noise, что у материалов скинов, — поры,
@@ -26,15 +30,19 @@ namespace BubbleRise
     /// </summary>
     public static partial class SpriteFactory
     {
-        /// <summary>Направление на источник света. Сверху-слева, одно на всю игру.</summary>
-        static readonly Vector2 LightDir = new Vector2(-0.55f, 0.84f).normalized;
+        /// <summary>
+        /// Где на препятствии лежит блик — в мире, сверху-слева, в долях радиуса.
+        /// Его рисует невращающийся слой Obstacle; рисунки угрозы света не несут.
+        /// </summary>
+        public static readonly Vector2 HazardGlintOffset = new Vector2(-0.22f, 0.25f);
 
         /// <summary>Цвет подводной дымки — ею объекты «садятся» в воду.</summary>
         static readonly Color Haze = Palette.Hex("4E8FA0");
 
         /// <summary>
-        /// Объёмная заливка: свет сверху-слева, тень снизу-справа, отражённый свет
-        /// по нижнему краю и тёмная обводка по контуру.
+        /// Объёмная заливка без направления: купол — середина светлее, край
+        /// темнее, отражённый свет воды по всей кромке и тёмная обводка. При
+        /// любом повороте рисунок одинаков (D-17).
         /// </summary>
         /// <param name="p">Точка в нормализованных координатах.</param>
         /// <param name="edge">Расстояние до края формы: 0 в центре, 1 на контуре.</param>
@@ -42,20 +50,17 @@ namespace BubbleRise
         /// <param name="relief">Насколько выражен объём. 1 — обычный камень.</param>
         static Color Volume(Vector2 p, float edge, Color baseColor, float relief = 1f)
         {
-            // Нормаль полусферы: в центре смотрит на зрителя, у края — наружу.
+            // Купол: высота полусферы — от неё и свет, без направления.
             float h = Mathf.Sqrt(Mathf.Max(0f, 1f - edge * edge));
-            Vector2 n = p.sqrMagnitude > 0.0001f ? p.normalized : Vector2.up;
-
-            float lambert = Vector2.Dot(n, LightDir) * (1f - h) + h * 0.55f;
-            lambert = Mathf.Clamp01(0.5f + lambert * 0.5f);
+            float lambert = Mathf.Clamp01(0.3f + h * 0.55f);
 
             Color lit = Color.Lerp(baseColor * (1f - 0.42f * relief),
                                    Color.Lerp(baseColor, Palette.Foam, 0.3f * relief),
                                    lambert);
 
-            // Отражённый свет: вода подсвечивает нижний край снизу-справа.
-            float bounce = Mathf.Clamp01(Vector2.Dot(n, -LightDir)) * edge * edge;
-            lit = Color.Lerp(lit, Color.Lerp(baseColor, Haze, 0.55f), bounce * 0.3f * relief);
+            // Отражённый свет: вода подсвечивает кромку со всех сторон.
+            float bounce = edge * edge * edge;
+            lit = Color.Lerp(lit, Color.Lerp(baseColor, Haze, 0.55f), bounce * 0.18f * relief);
 
             // Обводка: темнее своего цвета, но не чёрная.
             if (edge > 0.88f)
@@ -81,9 +86,8 @@ namespace BubbleRise
         /// </summary>
         static Color SimpleVolume(Vector2 p, float edge, Color baseColor)
         {
-            // Градиент по направлению на свет: одна величина, один переход.
-            float lit = Mathf.Clamp01(0.5f + Vector2.Dot(p.normalized, LightDir) * 0.5f);
-            if (p.sqrMagnitude < 0.0001f) lit = 0.75f;
+            // Купол без направления: середина светлее, к краю темнее (D-17).
+            float lit = Mathf.Clamp01(1f - edge * 0.85f);
 
             Color dark = baseColor * 0.62f;
             Color light = Color.Lerp(baseColor, Palette.Foam, 0.22f);
@@ -115,22 +119,27 @@ namespace BubbleRise
         }
 
         /// <summary>
-        /// Подводная дымка: к нижнему краю предмет слегка уходит в бирюзу.
-        /// Слабая — иначе препятствие перестаёт отличаться от фона.
+        /// Подводная дымка: к краю предмет слегка уходит в бирюзу — со всех сторон,
+        /// иначе дымка «снизу» вращалась бы вместе с обломком (D-17). Слабая —
+        /// иначе препятствие перестаёт отличаться от фона.
         /// </summary>
         static Color Underwater(Color c, Vector2 p, float strength = 0.12f)
-            => Color.Lerp(c, Haze, Mathf.InverseLerp(0.6f, -1f, p.y) * strength);
+            => Color.Lerp(c, Haze, Mathf.InverseLerp(0.45f, 1f, p.magnitude) * strength);
 
         /// <summary>
-        /// Мягкий блик. Статичный и неяркий: просили без пересвета, а движущийся
-        /// блик на падающем камне читался бы как мерцание.
+        /// Мягкий отсвет в середине формы. Раньше здесь был блик в точке
+        /// <paramref name="at"/> сверху-слева — он вращался вместе с обломком
+        /// (D-17). Теперь блик рисует невращающийся слой Obstacle, а в рисунке
+        /// остаётся только центральный отсвет: при любом повороте одинаковый.
+        /// Место <paramref name="at"/> задаёт лишь его размах.
         /// </summary>
         static Color Specular(Color c, Vector2 p, Vector2 at, float radius, float power = 0.22f)
         {
-            float d = Vector2.Distance(p, at);
-            if (d > radius) return c;
-            float k = Mathf.SmoothStep(1f, 0f, d / radius);
-            return Color.Lerp(c, Color.Lerp(c, Palette.Foam, 0.85f), k * power);
+            float r = radius + at.magnitude * 0.5f;
+            float d = p.magnitude;
+            if (d > r) return c;
+            float k = Mathf.SmoothStep(1f, 0f, d / r);
+            return Color.Lerp(c, Color.Lerp(c, Palette.Foam, 0.6f), k * power * 0.5f);
         }
 
         /// <summary>Поры и зернистость: мелкий шум по поверхности.</summary>
@@ -159,8 +168,8 @@ namespace BubbleRise
         static Color Crust(Color c, Vector2 p, Color crust, float scale, float amount, int seed = 0)
         {
             float n = Wisp(p, scale, 17f + seed * 2.3f, 29f + seed * 4.1f);
-            float top = Mathf.InverseLerp(-0.4f, 0.9f, p.y);
-            float k = Mathf.Clamp01((n - 0.18f) * 2.4f) * top * amount;
+            // пятнами по всей форме: «сверху» у вращающегося обломка нет (D-17)
+            float k = Mathf.Clamp01((n - 0.18f) * 2.4f) * 0.7f * amount;
             return Color.Lerp(c, crust, k);
         }
 

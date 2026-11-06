@@ -75,7 +75,7 @@ namespace BubbleRise
             Vector2 n = new Vector2(Mathf.Cos(a), Mathf.Sin(a));
             Vector2 through = n * (0.28f + v * 0.06f);
 
-            return Build("rockv" + v, p =>
+            return BuildOutlined("rockv" + v, p =>
             {
                 if (!InPolygon(p, poly)) return Color.clear;
 
@@ -102,10 +102,13 @@ namespace BubbleRise
 
             int spines = 6 + v;                       // 6, 7, 8 — крупные и редкие
             float spineLen = 0.46f - v * 0.03f;
-            Color body = Shift(Palette.UrchinBody, 0f, -0.05f + v * 0.05f, v * 0.05f);
+            // Тело светлее прежнего UrchinBody (3A2540, контраст с водой 1.3:1, D-22):
+            // 7A5A8A даёт ≥ 2.5:1 к фону колонны на любой глубине (95-й перцентиль
+            // L ≤ 0.024 [ТЕСТ]), и ёж читается силуэтом, а не только иглами.
+            Color body = Shift(Palette.Hex("7A5A8A"), 0f, -0.05f + v * 0.05f, v * 0.05f);
             Color tip = Shift(Palette.Hex("E8A0C0"), 0f, -0.05f, 0.04f);
 
-            return Build("urchinv" + v, p =>
+            return BuildOutlined("urchinv" + v, p =>
             {
                 float d = p.magnitude;
                 float a = Mathf.Atan2(p.y, p.x);
@@ -143,7 +146,7 @@ namespace BubbleRise
             Color body = Shift(Palette.CoralBody, v * 0.005f, 0.06f - v * 0.03f, -0.04f + v * 0.045f);
             Color tipc = Shift(Palette.CoralTip, v * 0.005f, 0f, 0.05f);
 
-            return Build("coralv" + v, p =>
+            return BuildOutlined("coralv" + v, p =>
             {
                 if (!InPolygon(p, poly)) return Color.clear;
 
@@ -157,7 +160,11 @@ namespace BubbleRise
 
                 c = Grain(c, p, 14f, 0.35f, v + 2);
                 c = Crust(c, p, Palette.Hex("A8C8A0"), 6f, 0.22f, v);
-                c = Specular(c, p, new Vector2(-0.26f, 0.3f), 0.34f, 0.2f);
+                // Блик сверху-слева был запечён в рисунок и крутился вместе с
+                // обломком (D-17); блик рисует невращающийся слой Obstacle.
+                // Вместо него — пара ракушек: деталь, которой поворот не мешает.
+                c = Shell(c, p, new Vector2(0.28f - v * 0.12f, -0.34f + v * 0.08f), 0.1f);
+                if (v % 2 == 0) c = Shell(c, p, new Vector2(-0.36f, 0.12f + v * 0.05f), 0.07f);
                 return Underwater(c, p);
             }, size: BigSize);
         }
@@ -174,7 +181,7 @@ namespace BubbleRise
             int blades = 3 + v % 3;
             Color body = Shift(Palette.Hex("8FE3C8"), v * 0.02f, 0.05f, -0.05f + v * 0.03f);
 
-            return Build("spinnerv" + v, p =>
+            return BuildOutlined("spinnerv" + v, p =>
             {
                 float d = p.magnitude;
                 if (d > 0.98f) return Color.clear;
@@ -220,7 +227,7 @@ namespace BubbleRise
 
             int cones = 2 + v % 2;
 
-            return Build("barnaclev" + v, p =>
+            return BuildOutlined("barnaclev" + v, p =>
             {
                 if (!InPolygon(p, poly)) return Color.clear;
 
@@ -267,7 +274,7 @@ namespace BubbleRise
             Vector2 dir = new Vector2(Mathf.Cos(a), Mathf.Sin(a));
             Vector2 nrm = new Vector2(-dir.y, dir.x);
 
-            return Build("cinderv" + v, p =>
+            return BuildOutlined("cinderv" + v, p =>
             {
                 if (!InPolygon(p, poly)) return Color.clear;
 
@@ -300,7 +307,7 @@ namespace BubbleRise
             Color iron = Shift(Palette.Hex("9AA7B4"), v * 0.01f, 0.02f, -0.08f + v * 0.03f);
             Color rust = Palette.Hex("8F5A32");
 
-            return Build("anchorv" + v, p =>
+            return BuildOutlined("anchorv" + v, p =>
             {
                 // Трапеция-груз: широкое основание, скошенные бока.
                 float half = Mathf.Lerp(0.82f, 0.5f, Mathf.InverseLerp(-0.75f, 0.75f, p.y));
@@ -350,7 +357,7 @@ namespace BubbleRise
             Color shell = Shift(Palette.Hex("3E4A55"), v * 0.01f, 0.02f, v * 0.02f);
             Color warn = Shift(Palette.Hex("E05A4A"), v * 0.012f, 0f, -0.04f);
 
-            return Build("minev" + v, p =>
+            return BuildOutlined("minev" + v, p =>
             {
                 float d = p.magnitude;
                 float a = Mathf.Atan2(p.y, p.x);
@@ -401,7 +408,7 @@ namespace BubbleRise
             int v = Mathf.Abs(variant) % HazardVariants;
             Color bell = Shift(Palette.Hex("7BE8FF"), v * 0.02f, -0.05f, -0.1f + v * 0.04f);
 
-            return Build("glowtrapv" + v, p =>
+            return BuildOutlined("glowtrapv" + v, p =>
             {
                 float d = p.magnitude;
                 if (d > 0.96f) return Color.clear;
@@ -444,7 +451,7 @@ namespace BubbleRise
             int v = Mathf.Abs(variant) % HazardVariants;
             Color swirl = Shift(Palette.Hex("6E7BE8"), v * 0.02f, 0f, v * 0.03f);
 
-            return Build("vortexv" + v, p =>
+            return BuildOutlined("vortexv" + v, p =>
             {
                 float d = p.magnitude;
                 if (d > 1f) return Color.clear;
@@ -486,7 +493,7 @@ namespace BubbleRise
             float open = 0.16f + v * 0.03f;       // насколько разведены створки
             float span = 1.0f;                    // угловая ширина створки
 
-            return Build("jawv" + v, p =>
+            return BuildOutlined("jawv" + v, p =>
             {
                 Vector2 from = p - hinge;
                 float d = from.magnitude;

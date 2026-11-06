@@ -193,49 +193,50 @@ namespace BubbleRise
         /// <summary>
         /// Десять трофеев. 100–150 частиц, радиус 2.9–3.4 D, 2.0–3.0 с: трофей
         /// нельзя купить, пока босс жив, и выглядеть он обязан заметнее
-        /// купленного. Порядок строго как в <see cref="BossKind"/>.
+        /// купленного — формой и числом, а не яркостью: цвета — приглушённые тона
+        /// самого босса, как у мини-босса. Порядок строго как в <see cref="BossKind"/>.
         /// </summary>
         public static readonly EnvelopeDef[] Boss =
         {
             // Jelly — «Шаровая молния»: купол из толстых ветвистых разрядов.
-            D(EnvelopeKind.Arc, LinkKind.Bolt, "7FE8FF", "8A5BFF", "C9A8FF", "0A1C4A",
+            D(EnvelopeKind.Arc, LinkKind.Bolt, "3E8A86", "4A3D78", "6A5A9C", "0E0A1E",
               2.4f, 132, 2.40f, 0.6f, 6, 0.33f, true),
 
             // Serpent — «Клык змея»: змейки по орбите и ядовитые капли.
-            D(EnvelopeKind.Serpent, LinkKind.Reach, "7FE3A0", "2F8F5B", "DFFFE8", "0A3320",
+            D(EnvelopeKind.Serpent, LinkKind.Reach, "6E9AA4", "2B4856", "948A76", "0E1A20",
               2.4f, 124, 2.25f, 0.5f, 5, 0.3f, true),
 
             // Octopus — «Присоска»: щупальца втягивают частицы внутрь.
-            D(EnvelopeKind.Tentacle, LinkKind.Reach, "C06BE8", "5A2F7A", "FFAFD4", "2A0A3A",
+            D(EnvelopeKind.Tentacle, LinkKind.Reach, "8A5A94", "4A2652", "9C6A88", "1E0A22",
               2.6f, 138, 2.47f, 0.35f, 6, 0.34f, true),
 
             // Swordfish — «Остриё клинка»: стальные росчерки по касательной.
-            D(EnvelopeKind.Blade, LinkKind.Slash, "CFEEFF", "5FA8D8", "93A9BC", "10222E",
+            D(EnvelopeKind.Blade, LinkKind.Slash, "8EA0AE", "3E5468", "6E8699", "0E1A26",
               2.0f, 112, 2.47f, 0.9f, 5, 0.3f, true),
 
             // Crab — «Клешня»: короткие рывки наружу и обратно.
-            D(EnvelopeKind.Pincer, LinkKind.Slash, "FF9A6B", "C2502F", "FFD8A8", "3A1206",
+            D(EnvelopeKind.Pincer, LinkKind.Slash, "A8604A", "6E2A1C", "A08C6A", "2A0E06",
               2.1f, 118, 2.17f, 0.7f, 6, 0.31f, true),
 
             // Ink — «Чернильник»: клякса расплывается, внутри искры. Светлее, чем
             // просится по смыслу: на тёмно-синей воде настоящих чернил не видно.
-            D(EnvelopeKind.Ink, LinkKind.Tongue, "8A7CAE", "2A2340", "FFD166", "120E1C",
+            D(EnvelopeKind.Ink, LinkKind.Tongue, "5E4A8A", "2A1A48", "7A62A8", "0E0A16",
               2.6f, 136, 2.40f, 0.25f, 5, 0.34f, true),
 
             // Piranha — «Стая»: мелкие силуэты кружат рывками.
-            D(EnvelopeKind.Swarm, LinkKind.Slash, "FF6B5B", "B52A1E", "FFC8B8", "3A0A06",
+            D(EnvelopeKind.Swarm, LinkKind.Slash, "8C5048", "4A2A26", "7C8D96", "1E0A08",
               2.1f, 142, 2.47f, 0.8f, 6, 0.28f, true),
 
             // Turtle — «Панцирь»: каменные пластины вращаются кольцом.
-            D(EnvelopeKind.Shell, LinkKind.Thread, "9FD8A8", "4F8F62", "DFFFE0", "16331C",
+            D(EnvelopeKind.Shell, LinkKind.Thread, "7A8E5A", "3E5430", "8E8A6A", "101C0C",
               2.6f, 106, 2.17f, 0.22f, 4, 0.29f, true),
 
             // Shark — «Плавник»: быстрые серые дуги проходят мимо.
-            D(EnvelopeKind.Fin, LinkKind.Slash, "BCCBD6", "48525C", "EAF2F8", "151C24",
+            D(EnvelopeKind.Fin, LinkKind.Slash, "7A8A94", "3E4C56", "8A969C", "101820",
               2.0f, 116, 2.50f, 0.85f, 5, 0.3f, true),
 
             // Manta — «Крыло»: широкие тёмные волны расходятся сеткой.
-            D(EnvelopeKind.Wing, LinkKind.Bolt, "8FB8FF", "3A5FBF", "DFF0FF", "0A1A40",
+            D(EnvelopeKind.Wing, LinkKind.Bolt, "3E6A74", "1E3440", "8A3A30", "06101A",
               2.6f, 148, 2.50f, 0.3f, 7, 0.32f, true),
         };
 
@@ -245,6 +246,16 @@ namespace BubbleRise
         /// Возвращает ложь для всех прочих редкостей — у них свой тихий эффект, и
         /// это намеренно.
         /// </summary>
+        /// <summary>
+        /// Общая прозрачность оболочки трофеев. Цвета у них — приглушённые тона босса,
+        /// но частиц много и они ложатся друг на друга: плотное кольцо без этого
+        /// множителя всё равно читалось бы светящимся. Размер и число — прежние.
+        /// </summary>
+        public const float TrophyAlpha = 0.6f;
+
+        /// <summary>Множитель прозрачности оболочки: у трофеев — <see cref="TrophyAlpha"/>, у легендарных — 1.</summary>
+        public static float Alpha(EnvelopeDef def) => def.Rich ? TrophyAlpha : 1f;
+
         public static bool TryGet(SkinDef skin, out EnvelopeDef def)
         {
             if (skin.Kind == UnlockKind.Boss)

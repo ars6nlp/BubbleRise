@@ -58,6 +58,12 @@ namespace BubbleRise
         SpriteRenderer _sr;
         SpriteRenderer _cracks;
 
+        // Блик — отдельным слоем, который не вращается вместе с обломком (D-17):
+        // свет у всех угроз сверху-слева в мире, какой бы стороной их ни повернуло.
+        SpriteRenderer _glint;
+        bool _hasGlint;
+        static readonly Color GlintColor = Palette.Hex("B4C4CE").WithAlpha(0.22f);   // сумма каналов 2.28
+
         HazardStats _stats;
         int _hp;
         int _reward;
@@ -99,6 +105,14 @@ namespace BubbleRise
             _cracks.sortingOrder = SortingOrders.Obstacle + 1;
             _cracks.sprite = SpriteFactory.CracksStage(1);
             _cracks.enabled = false;
+
+            var glintObject = new GameObject("Glint");
+            glintObject.transform.SetParent(transform, false);
+            _glint = glintObject.AddComponent<SpriteRenderer>();
+            _glint.sharedMaterial = SpriteFactory.Unlit;
+            _glint.sortingOrder = SortingOrders.Obstacle + 1;
+            _glint.sprite = SpriteFactory.SoftDot();
+            _glint.enabled = false;
 
         }
 
@@ -152,6 +166,13 @@ namespace BubbleRise
             transform.position = position;
             transform.localScale = Vector3.one * (Radius * 2f);
             transform.rotation = Quaternion.Euler(0f, 0f, Random.Range(0f, 360f));
+
+            // У якоря и воронки форма тонкая — блик лёг бы на воду; ловушка светится сама.
+            _hasGlint = type != ObstacleType.Anchor && type != ObstacleType.Vortex
+                        && type != ObstacleType.Glowtrap;
+            _glint.enabled = _hasGlint;
+            _glint.color = GlintColor;
+            PlaceGlint();
             gameObject.SetActive(true);
         }
 
@@ -260,10 +281,12 @@ namespace BubbleRise
                 var c = _sr.color;
                 c.a = a;
                 _sr.color = c;
+                if (_hasGlint) _glint.color = GlintColor.WithAlpha(GlintColor.a * a);
                 if (_fade <= 0f) return false;
             }
 
             TickFlash(dt);
+            PlaceGlint();
 
             var pos = transform.position;
             if (pos.y < field.Bottom - 1.5f || pos.y > field.Top + 4f ||
@@ -327,6 +350,22 @@ namespace BubbleRise
         }
 
         /// <summary>Нарастание вспышки удара, с. Было 0 — фронт за кадр.</summary>
+        /// <summary>
+        /// Блик — в мировой ориентации: поворот обломка его не трогает, место
+        /// сверху-слева от центра в долях радиуса, размер — четверть радиуса.
+        /// Внутри силуэта: край блика не дальше 0.6 радиуса от центра.
+        /// </summary>
+        void PlaceGlint()
+        {
+            if (!_hasGlint) return;
+            var t = _glint.transform;
+            float r = Radius;
+            t.position = transform.position + (Vector3)(SpriteFactory.HazardGlintOffset * r);
+            t.rotation = Quaternion.identity;
+            // localScale делится на масштаб родителя (диаметр 2R): в мире — 0.52R
+            t.localScale = Vector3.one * (0.52f * r / Mathf.Max(0.001f, r * 2f));
+        }
+
         const float FlashRise = 0.06f;
         bool _flashUp;
 

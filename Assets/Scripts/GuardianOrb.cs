@@ -1,4 +1,6 @@
+using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.EventSystems;
 
 namespace BubbleRise
 {
@@ -29,11 +31,51 @@ namespace BubbleRise
         public Vector2 Center => transform.position;
 
         /// <summary>Пока выключено — страж просто держится у пузырька и не реагирует на указатель
-        /// (стартовый экран и экран поражения).</summary>
-        public bool InputEnabled { get; set; } = true;
+        /// (стартовый экран, пауза, экран поражения). Выключение отпускает стража
+        /// сразу, а не в следующем Tick: на паузе Tick не идёт вовсе.</summary>
+        public bool InputEnabled
+        {
+            get => _inputEnabled;
+            set
+            {
+                if (_inputEnabled == value) return;
+                _inputEnabled = value;
+                if (!value) DropGrip(GripBreak.InputOff);
+                else RequireFreshPress();
+            }
+        }
+        bool _inputEnabled = true;
 
-        /// <summary>Курсор над дев-панелью — не тащим стража за кликом по кнопке.</summary>
-        public bool DevInputBlocked { get; set; }
+        /// <summary>
+        /// Дев-панель и её кнопка, экранные пиксели (начало снизу слева). Касание,
+        /// начатое здесь, стража не хватает; захват, начатый в игре, сюда заходит
+        /// свободно.
+        /// </summary>
+        public Rect DevUiRect { get; set; }
+
+        /// <summary>
+        /// Проверка «касание над интерфейсом» вместо EventSystem — для тестов.
+        /// null — луч EventSystem по интерактивным элементам.
+        /// </summary>
+        public static System.Func<Vector2, bool> UiHitTest;
+
+        /// <summary>Почему страж ушёл домой, хотя палец, по всем признакам, был на экране.</summary>
+        public enum GripBreak { None, Canceled, Vanished, EndedRetouch, InputOff, Reset }
+
+        /// <summary>
+        /// Разрывы захвата для дев-панели: сколько раз страж уходил домой, пока
+        /// палец, по всем признакам, ещё был на экране, почему в последний раз и
+        /// когда (Time.unscaledTime). Подхваты — сколько раз касание пропадало и
+        /// находилось в пределах допуска, и через сколько миллисекунд. Текст
+        /// причин — в DevPanel: в игре строк для игрока здесь нет.
+        /// </summary>
+        public int GripBreaks { get; private set; }
+        public GripBreak LastGripBreak { get; private set; }
+        public float LastGripBreakAt { get; private set; }
+        public int LastGripBreakMs { get; private set; }
+        public int GripRescues { get; private set; }
+        public PointerInput.ContactPhase? LastRescuePhase { get; private set; }
+        public int LastRescueMs { get; private set; }
 
         /// <summary>Оттенок выбранного скина. Домножается к цвету состояния (перезарядка, захват).</summary>
         public Color Tint { get; set; } = Color.white;
@@ -82,7 +124,6 @@ namespace BubbleRise
         BubbleController _bubble;
         SpriteRenderer _sr;
 
-        bool _prevPressed;
         Vector2 _grabOffset;
         float _pulse;
         float _cooldown;
@@ -96,6 +137,15 @@ namespace BubbleRise
         bool _hasRepelZone;
         Vector2 _repelCenter;
         float _repelRadius;
+
+        // Кольцо с проёмом (кольцо змея): изнутри наружу страж проходит только
+        // через проём. Тело змея для него — стенка, а не урон.
+        bool _hasConfine;
+        bool _confineInside;
+        Vector2 _confineCenter;
+        float _confineRadius;
+        float _confineGapAngle;
+        float _confineGapHalf;
 
         public void Init(GameConfig cfg, Playfield field, BubbleController bubble)
         {
@@ -155,12 +205,13 @@ namespace BubbleRise
         {
             Radius = PlayerSize.Guardian(_cfg);
             transform.localScale = Vector3.one * (Radius * 2f);
-            IsDragging = false;
-            _prevPressed = true; // требуем свежее нажатие, чтобы не «прыгнуть» на палец после клика по кнопке
+            DropGrip(GripBreak.Reset);
+            RequireFreshPress();   // свежее нажатие: не «прыгнуть» на палец после клика по кнопке
             _cooldown = 0f;
             _isPinned = false;
             _isDisplaced = false;
             _hasRepelZone = false;
+            _hasConfine = false;
             RepelledThisFrame = false;
             _sr.color = Tint;
             _sr.enabled = true;   // «Чернильный морок» прячет стража; партия начинается с видимого
@@ -192,7 +243,7 @@ namespace BubbleRise
             _displacedAt = _field.ClampToScreen(worldPosition, Radius * 1.2f);
             transform.position = _displacedAt;
             IsDragging = false;
-            _prevPressed = true;   // нужно свежее нажатие, иначе палец «поймает» стража сам
+            RequireFreshPress();   // нужно свежее нажатие, иначе палец «поймает» стража сам
         }
 
         public void ClearDisplacement() => _isDisplaced = false;
@@ -212,7 +263,7 @@ namespace BubbleRise
         {
             if (!_isPinned) return;
             _isPinned = false;
-            _prevPressed = true; // после освобождения нужно свежее нажатие
+            RequireFreshPress(); // после освобождения нужно свежее нажатие
         }
 
         /// <summary>Зона, куда стража не пускают (поле босса).</summary>
@@ -224,6 +275,54 @@ namespace BubbleRise
         }
 
         public void ClearRepelZone() => _hasRepelZone = false;
+
+        /// <summary>
+        /// Обвить стража кольцом с проёмом. Пока страж внутри, дальше
+        /// <paramref name="radius"/> он уходит только через проём: направление
+        /// <paramref name="gapAngle"/> (радианы), полуширина <paramref name="gapHalf"/>.
+        /// Зовётся каждый кадр — кольцо сжимается. Был снаружи при первом вызове —
+        /// кольцо его не касается.
+        /// </summary>
+        public void SetConfine(Vector2 center, float radius, float gapAngle, float gapHalf)
+        {
+            if (!_hasConfine)
+                _confineInside = Vector2.Distance(transform.position, center) < radius;
+            _hasConfine = true;
+            _confineCenter = center;
+            _confineRadius = Mathf.Max(0.01f, radius);
+            _confineGapAngle = gapAngle;
+            _confineGapHalf = Mathf.Max(0f, gapHalf);
+        }
+
+        public void ClearConfine() => _hasConfine = false;
+
+        /// <summary>Страж всё ещё внутри кольца — то есть не вышел через проём.</summary>
+        public bool ConfinedInside => _hasConfine && _confineInside;
+
+        void ApplyConfine()
+        {
+            if (!_hasConfine || !_confineInside) return;
+
+            Vector2 pos = transform.position;
+            Vector2 d = pos - _confineCenter;
+            float dist = d.magnitude;
+            if (dist < 0.0001f) return;
+
+            // Проём сужается на угловой радиус самого стража: целиком пролезть
+            // должен шарик, а не его центр.
+            float angle = Mathf.Atan2(d.y, d.x);
+            float off = Mathf.Abs(Mathf.DeltaAngle(angle * Mathf.Rad2Deg, _confineGapAngle * Mathf.Rad2Deg)) * Mathf.Deg2Rad;
+            float shoulder = Mathf.Asin(Mathf.Clamp01(Radius / Mathf.Max(dist, Radius)));
+            bool inGap = off < _confineGapHalf - shoulder;
+
+            float wall = Mathf.Max(0f, _confineRadius - Radius);
+            if (dist > wall && !inGap)
+            {
+                transform.position = _confineCenter + d / dist * wall;
+                return;
+            }
+            if (dist > _confineRadius + Radius) _confineInside = false;   // вышел через проём
+        }
 
         /// <summary>
         /// Притяжение водоворота. Копится за кадр и гасится в Tick: воронок на
@@ -276,7 +375,7 @@ namespace BubbleRise
                 if (_cooldown <= 0f) JustRecharged = true;
             }
 
-            HandleInput();
+            HandleInput(dt);
 
             Vector2 target;
             float lerp;
@@ -358,6 +457,7 @@ namespace BubbleRise
 
             float k = 1f - Mathf.Exp(-lerp * dt); // независимо от частоты кадров
             transform.position = Vector2.Lerp(transform.position, target, k);
+            ApplyConfine();
 
             // пульсация свечения; на перезарядке страж тускнеет и сжимается
             _pulse += dt * 4f;
@@ -417,37 +517,181 @@ namespace BubbleRise
 
         Vector2 _pointerWorld;
 
-        void HandleInput()
+        // ------------------------------------------------------------ захват
+        //
+        // Страж держится за конкретное касание (id), а не за «главное касание»
+        // платформы. Прежде любой кадр без нажатия отпускал стража: система на
+        // кадр отменяла касание (ладонь, жест у края, повторная выдача пальца под
+        // новым id) — и страж уходил к пузырьку, а когда касание возвращалось,
+        // хватался заново уже без смещения захвата и прыгал под палец.
+        //
+        // Теперь ведёт только палец, который схватил; второй палец и ладонь его не
+        // сбивают. Пропал этот палец — ждём guardianReleaseGrace: вернулся под новым
+        // id рядом — это тот же палец, смещение захвата прежнее. Не вернулся — страж
+        // уходит домой, как и раньше. Касание, начатое над кнопкой, стража не
+        // хватает; захват, начатый в игре, над кнопками не теряется.
+
+        /// <summary>
+        /// Насколько далеко (доля высоты экрана) от точки, где пропал палец, может
+        /// появиться «тот же» палец. За 0.08 с даже резкий мах проходит меньше.
+        /// </summary>
+        const float RegripRadius = 0.16f;
+
+        /// <summary>Повторное касание после отпускания раньше этого — палец, скорее всего, не отрывали.</summary>
+        const float QuickRetouch = 0.3f;
+
+        readonly List<PointerInput.Contact> _contacts = new List<PointerInput.Contact>();
+        HashSet<int> _activeIds = new HashSet<int>();
+        HashSet<int> _prevActiveIds = new HashSet<int>();
+        readonly HashSet<int> _ignoredIds = new HashSet<int>();
+        int _gripId;
+        float _lostFor;
+        PointerInput.ContactPhase? _lostPhase;
+        bool _requireFresh = true;
+        float _releasedAt = -10f;
+        Vector2 _releasedWorld;
+        PointerEventData _uiEvent;
+        readonly List<RaycastResult> _uiHits = new List<RaycastResult>();
+
+        /// <summary>Касания, которые уже на экране, хватать не должны — только новые.</summary>
+        void RequireFreshPress() => _requireFresh = true;
+
+        void DropGrip(GripBreak reason)
         {
-            if (!InputEnabled || DevInputBlocked)
-            {
-                IsDragging = false;
-                _prevPressed = true; // после разблокировки нужно свежее нажатие
-                return;
-            }
+            if (!IsDragging) return;
+            IsDragging = false;
+            // палец ещё держал — домой страж пошёл не по воле игрока
+            if (_lostFor <= 0f) NoteBreak(reason, 0);
+            _lostFor = 0f;
+            _lostPhase = null;
+        }
 
-            if (!PointerInput.TryRead(out Vector2 screenPos, out bool pressed))
-            {
-                IsDragging = false;
-                _prevPressed = false;
-                return;
-            }
+        void NoteBreak(GripBreak reason, int ms)
+        {
+            GripBreaks++;
+            LastGripBreak = reason;
+            LastGripBreakMs = ms;
+            LastGripBreakAt = Time.unscaledTime;
+        }
 
+        Vector2 ToWorld(Vector2 screen)
+        {
             var cam = _field.Cam;
-            Vector3 world = cam.ScreenToWorldPoint(new Vector3(screenPos.x, screenPos.y, -cam.transform.position.z));
-            _pointerWorld = new Vector2(world.x, world.y);
+            Vector3 world = cam.ScreenToWorldPoint(new Vector3(screen.x, screen.y, -cam.transform.position.z));
+            return new Vector2(world.x, world.y);
+        }
 
-            bool justPressed = pressed && !_prevPressed;
-            _prevPressed = pressed;
+        void HandleInput(float dt)
+        {
+            PointerInput.ReadContacts(_contacts);
 
-            if (!pressed)
+            // Новые касания — те, которых в прошлом кадре не было среди идущих.
+            var swap = _prevActiveIds;
+            _prevActiveIds = _activeIds;
+            _activeIds = swap;
+            _activeIds.Clear();
+            for (int i = 0; i < _contacts.Count; i++)
+                if (_contacts[i].Phase == PointerInput.ContactPhase.Active) _activeIds.Add(_contacts[i].Id);
+            _ignoredIds.RemoveWhere(id => !_activeIds.Contains(id));
+            if (_requireFresh)
+            {
+                _ignoredIds.UnionWith(_activeIds);
+                _requireFresh = false;
+            }
+
+            if (!_inputEnabled)
             {
                 IsDragging = false;
+                _ignoredIds.UnionWith(_activeIds);
                 return;
             }
 
-            if (justPressed)
+            if (IsDragging && FollowGrip(dt)) return;
+            TryStartGrip();
+        }
+
+        /// <summary>Вести за своим пальцем. false — палец ушёл, страж отпущен.</summary>
+        bool FollowGrip(float dt)
+        {
+            // id платформа отдаёт заново после конца касания: в списке может быть и
+            // старая закончившаяся запись с тем же id — идущая важнее.
+            int ended = -1;
+            for (int i = 0; i < _contacts.Count; i++)
             {
+                var c = _contacts[i];
+                if (c.Id != _gripId) continue;
+                if (c.Phase != PointerInput.ContactPhase.Active) { ended = i; continue; }
+                _pointerWorld = ToWorld(c.Screen);
+                _lostFor = 0f;
+                _lostPhase = null;
+                return true;
+            }
+            if (ended >= 0 && _lostPhase == null) _lostPhase = _contacts[ended].Phase;
+
+            // Тот же палец мог прийти заново под другим id — новое касание рядом.
+            float radius = RegripRadius * (_field.Top - _field.Bottom);
+            int best = -1;
+            float bestDistance = radius;
+            for (int i = 0; i < _contacts.Count; i++)
+            {
+                var c = _contacts[i];
+                if (c.Phase != PointerInput.ContactPhase.Active || _prevActiveIds.Contains(c.Id)
+                    || _ignoredIds.Contains(c.Id)) continue;
+                float d = Vector2.Distance(ToWorld(c.Screen), _pointerWorld);
+                if (d <= bestDistance) { best = i; bestDistance = d; }
+            }
+            if (best >= 0)
+            {
+                GripRescues++;
+                LastRescuePhase = _lostPhase;
+                LastRescueMs = Mathf.RoundToInt(_lostFor * 1000f);
+                _gripId = _contacts[best].Id;
+                _pointerWorld = ToWorld(_contacts[best].Screen);
+                _lostFor = 0f;
+                _lostPhase = null;
+                return true;
+            }
+
+            // Ждём допуск, держа стража там, где был палец: короткое пропадание
+            // касания не должно уводить его к пузырьку.
+            _lostFor += dt;
+            if (_lostFor < _cfg.guardianReleaseGrace) return true;
+
+            IsDragging = false;
+            if (_lostPhase == PointerInput.ContactPhase.Canceled) NoteBreak(GripBreak.Canceled, 0);
+            else if (_lostPhase == null) NoteBreak(GripBreak.Vanished, 0);
+            _releasedAt = Time.unscaledTime;
+            _releasedWorld = _pointerWorld;
+            _lostFor = 0f;
+            _lostPhase = null;
+            return false;
+        }
+
+        void TryStartGrip()
+        {
+            for (int i = 0; i < _contacts.Count; i++)
+            {
+                var c = _contacts[i];
+                if (c.Phase != PointerInput.ContactPhase.Active || _prevActiveIds.Contains(c.Id)
+                    || _ignoredIds.Contains(c.Id)) continue;
+
+                // Нажатие над кнопкой — нажатие кнопки, а не захват (A-12). Касание
+                // помечаем: пока палец не отпущен, стража оно не схватит.
+                if (DevUiRect.Contains(c.Screen) || OverInteractiveUi(c.Screen))
+                {
+                    _ignoredIds.Add(c.Id);
+                    continue;
+                }
+
+                Vector2 world = ToWorld(c.Screen);
+
+                // Ушёл домой по Ended и почти сразу коснулись там же — скорее всего,
+                // палец и не отрывали: система прислала Ended посреди ведения.
+                if (Time.unscaledTime - _releasedAt < QuickRetouch &&
+                    Vector2.Distance(world, _releasedWorld) < RegripRadius * (_field.Top - _field.Bottom))
+                    NoteBreak(GripBreak.EndedRetouch, Mathf.RoundToInt((Time.unscaledTime - _releasedAt) * 1000f));
+                _releasedAt = -10f;
+
                 // Заброшенного стража надо именно найти и подобрать, поэтому зона
                 // захвата у него шире (тыкать пиксель в пиксель на телефоне нечестно),
                 // а «хватать откуда угодно» временно не работает — иначе страж прилетал
@@ -456,19 +700,51 @@ namespace BubbleRise
                     ? _cfg.guardianDisplacedGrabMultiplier
                     : _cfg.guardianGrabRadiusMultiplier;
 
-                bool onOrb = Vector2.Distance(_pointerWorld, Center) <= Radius * multiplier;
+                bool onOrb = Vector2.Distance(world, Center) <= Radius * multiplier;
 
                 if (onOrb)
-                {
-                    IsDragging = true;
-                    _grabOffset = Center - _pointerWorld; // тянем «за то место, где схватили»
-                }
+                    _grabOffset = Center - world;   // тянем «за то место, где схватили»
                 else if (_cfg.grabAnywhere && !_isDisplaced)
+                    _grabOffset = Vector2.zero;     // страж подлетает под палец
+                else
                 {
-                    IsDragging = true;
-                    _grabOffset = Vector2.zero;           // страж подлетает под палец
+                    _ignoredIds.Add(c.Id);          // мимо заброшенного стража — ждём новое касание
+                    continue;
                 }
+
+                IsDragging = true;
+                _gripId = c.Id;
+                _pointerWorld = world;
+                _lostFor = 0f;
+                _lostPhase = null;
+                return;
             }
+        }
+
+        /// <summary>
+        /// Касание над кнопкой или другим элементом, который сам ловит нажатие.
+        /// Луч EventSystem пускаем сами в этом же кадре: модуль ввода UI мог ещё
+        /// не обработать новое касание, и его «последний луч» был бы прошлым.
+        /// Надписи и баннеры нажатие не ловят — над ними стража хватать можно.
+        /// </summary>
+        bool OverInteractiveUi(Vector2 screen)
+        {
+            if (UiHitTest != null) return UiHitTest(screen);
+            var es = EventSystem.current;
+            if (es == null) return false;
+            if (_uiEvent == null) _uiEvent = new PointerEventData(es);
+            _uiEvent.Reset();
+            _uiEvent.position = screen;
+            _uiHits.Clear();
+            es.RaycastAll(_uiEvent, _uiHits);
+            for (int i = 0; i < _uiHits.Count; i++)
+            {
+                var go = _uiHits[i].gameObject;
+                if (ExecuteEvents.GetEventHandler<IPointerClickHandler>(go) != null ||
+                    ExecuteEvents.GetEventHandler<IPointerDownHandler>(go) != null)
+                    return true;
+            }
+            return false;
         }
 
         /// <summary>Вызывается при старте партии: сбросить состояние ввода.</summary>
