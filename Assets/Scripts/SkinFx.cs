@@ -335,16 +335,16 @@ namespace BubbleRise
         /// </summary>
         public static readonly MaterialFxDef[] Bosses =
         {
-            /* Jelly     */ D("C9A8FF", AuraStyle.Crackle, DestroyPattern.Arc,     "E8DFFF", "7A5BD0", 3, ImpactPattern.Arc, StatusKind.Shock, 3.6f),
-            /* Serpent   */ D("7FE3A0", AuraStyle.Pulse,   DestroyPattern.Spiral,  "DFFFE8", "2F8F5B", 3, ImpactPattern.Ripple, StatusKind.Corrode, 3.6f),
-            /* Octopus   */ D("B06BD8", AuraStyle.Mist,    DestroyPattern.Implode, "E8C8FF", "5A2F7A", 3, ImpactPattern.Void, StatusKind.Shadow, 3.6f),
-            /* Swordfish */ D("BFE6FF", AuraStyle.Shimmer, DestroyPattern.Shards,  "DFF4FF", "5FA8D8", 3, ImpactPattern.Shatter, StatusKind.Crystal, 3.6f),
-            /* Crab      */ D("FF9A6B", AuraStyle.Heat,    DestroyPattern.Burst,   "FFD8A8", "C2502F", 3, ImpactPattern.Sparks, StatusKind.Burn, 3.6f),
-            /* Ink       */ D("4A4458", AuraStyle.Mist,    DestroyPattern.Mist,    "8F8FA8", "16131F", 3, ImpactPattern.Dust, StatusKind.Haze, 3.6f),
-            /* Piranha   */ D("FF6B5B", AuraStyle.Crackle, DestroyPattern.Rain,    "FFC8B8", "B52A1E", 3, ImpactPattern.Spray, StatusKind.Corrode, 3.4f),
-            /* Turtle    */ D("9FD8A8", AuraStyle.Frost,   DestroyPattern.Ring,    "DFFFE0", "4F8F62", 3, ImpactPattern.Frost, StatusKind.Freeze, 3.6f),
-            /* Shark     */ D("A8B8C4", AuraStyle.Pulse,   DestroyPattern.Burst,   "DCE4EA", "48525C", 3, ImpactPattern.Splash, StatusKind.Petrify, 3.4f),
-            /* Manta     */ D("8FB8FF", AuraStyle.Halo,    DestroyPattern.Grid,    "DFF0FF", "3A5FBF", 3, ImpactPattern.Flash, StatusKind.Spectrum, 3.8f),
+            /* Jelly     */ D("3A2E5C", AuraStyle.Mist,    DestroyPattern.Arc,     "7A6AAE", "3A2E5C", 3, ImpactPattern.Arc, StatusKind.Shock, 3.6f),
+            /* Serpent   */ D("2B4856", AuraStyle.Mist,    DestroyPattern.Spiral,  "6E9AA4", "2B4856", 3, ImpactPattern.Ripple, StatusKind.Corrode, 3.6f),
+            /* Octopus   */ D("5B2E63", AuraStyle.Mist,    DestroyPattern.Implode, "9A6A98", "5B2E63", 3, ImpactPattern.Void, StatusKind.Shadow, 3.6f),
+            /* Swordfish */ D("3E5468", AuraStyle.Mist,    DestroyPattern.Shards,  "8EA0AE", "3E5468", 3, ImpactPattern.Shatter, StatusKind.Crystal, 3.6f),
+            /* Crab      */ D("7A2E1E", AuraStyle.Mist,    DestroyPattern.Burst,   "B0705A", "7A2E1E", 3, ImpactPattern.Sparks, StatusKind.Burn, 3.6f),
+            /* Ink       */ D("2A1A48", AuraStyle.Mist,    DestroyPattern.Mist,    "7A62A8", "2A1A48", 3, ImpactPattern.Dust, StatusKind.Haze, 3.6f),
+            /* Piranha   */ D("5A3A34", AuraStyle.Mist,    DestroyPattern.Rain,    "A86A58", "5A3A34", 3, ImpactPattern.Spray, StatusKind.Corrode, 3.4f),
+            /* Turtle    */ D("4E6436", AuraStyle.Mist,    DestroyPattern.Ring,    "8A9E6A", "4E6436", 3, ImpactPattern.Frost, StatusKind.Freeze, 3.6f),
+            /* Shark     */ D("3E4C56", AuraStyle.Mist,    DestroyPattern.Burst,   "8A98A0", "3E4C56", 3, ImpactPattern.Splash, StatusKind.Petrify, 3.4f),
+            /* Manta     */ D("1E2E38", AuraStyle.Mist,    DestroyPattern.Grid,    "4E7A84", "1E2E38", 3, ImpactPattern.Flash, StatusKind.Spectrum, 3.8f),
         };
 
         public static MaterialFxDef OfBoss(BossKind boss)
@@ -419,16 +419,16 @@ namespace BubbleRise
             /* 4  латунь    */ Def(SkinMotion.Shiver,  SkinTrail.Rings,    C("FFD98A"), C("FFC83D"), 5f,  0.04f, 3.1f),
 
             // --- трофеи с боссов ------------------------------------------------
-            /* 5  медуза    */ Def(SkinMotion.Throb,   SkinTrail.Veil,     C("C9A8FF"), C("7A5BD0"), 7f,  0.11f, 1.4f),
-            /* 6  змей      */ Def(SkinMotion.Stretch, SkinTrail.Ribbon,   C("7FE3A0"), C("2F8F5B"), 12f, 0.10f, 2.2f),
-            /* 7  спрут     */ Def(SkinMotion.Sway,    SkinTrail.Veil,     C("B06BD8"), C("5A2F7A"), 8f,  0.08f, 1.1f),
-            /* 8  клинок    */ Def(SkinMotion.Stretch, SkinTrail.Sparks,   C("BFE6FF"), C("5FA8D8"), 11f, 0.07f, 3.4f),
-            /* 9  краб      */ Def(SkinMotion.Shiver,  SkinTrail.Shards,   C("FF9A6B"), C("C2502F"), 7f,  0.05f, 2.8f),
-            /* 10 морок     */ Def(SkinMotion.Flicker, SkinTrail.Veil,     C("4A4458"), C("16131F"), 9f,  0.09f, 1.0f),
-            /* 11 пиранья   */ Def(SkinMotion.Flicker, SkinTrail.Sparks,   C("FF6B5B"), C("B52A1E"), 13f, 0.06f, 3.8f),
-            /* 12 черепаха  */ Def(SkinMotion.Breathe, SkinTrail.Shards,   C("9FD8A8"), C("4F8F62"), 5f,  0.04f, 1.0f),
-            /* 13 акула     */ Def(SkinMotion.Roll,    SkinTrail.Dust,     C("A8B8C4"), C("48525C"), 8f,  0.05f, 1.7f),
-            /* 14 скат      */ Def(SkinMotion.Sway,    SkinTrail.Ribbon,   C("8FB8FF"), C("3A5FBF"), 10f, 0.12f, 0.9f),
+            /* 5  медуза    */ Def(SkinMotion.Throb,   SkinTrail.Veil,     C("7A6AAE"), C("3A2E5C"), 7f,  0.04f, 1.4f),
+            /* 6  змей      */ Def(SkinMotion.Stretch, SkinTrail.Ribbon,   C("6E9AA4"), C("2B4856"), 10f, 0.04f, 2.2f),
+            /* 7  спрут     */ Def(SkinMotion.Sway,    SkinTrail.Veil,     C("9A6A98"), C("5B2E63"), 8f,  0.04f, 1.1f),
+            /* 8  клинок    */ Def(SkinMotion.Stretch, SkinTrail.Sparks,   C("8EA0AE"), C("3E5468"), 10f, 0.04f, 2.4f),
+            /* 9  краб      */ Def(SkinMotion.Shiver,  SkinTrail.Shards,   C("B0705A"), C("7A2E1E"), 7f,  0.04f, 0.5f),
+            /* 10 морок     */ Def(SkinMotion.Flicker, SkinTrail.Veil,     C("7A62A8"), C("2A1A48"), 9f,  0.04f, 1.0f),
+            /* 11 пиранья   */ Def(SkinMotion.Flicker, SkinTrail.Sparks,   C("A86A58"), C("5A3A34"), 10f, 0.04f, 1.2f),
+            /* 12 черепаха  */ Def(SkinMotion.Breathe, SkinTrail.Shards,   C("8A9E6A"), C("4E6436"), 5f,  0.04f, 1.0f),
+            /* 13 акула     */ Def(SkinMotion.Roll,    SkinTrail.Dust,     C("8A98A0"), C("3E4C56"), 8f,  0.04f, 1.4f),
+            /* 14 скат      */ Def(SkinMotion.Sway,    SkinTrail.Ribbon,   C("4E7A84"), C("1E2E38"), 8f,  0.04f, 0.9f),
 
             // --- награда за полную коллекцию ------------------------------------
             /* 15 звезда    */ Def(SkinMotion.Roll,    SkinTrail.Stardust, C("FFE9A8"), C("FFC83D"), 14f, 0.08f, 2.0f, Finisher.Starfall),

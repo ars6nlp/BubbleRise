@@ -70,6 +70,8 @@ namespace BubbleRise
 
             if (!playing) return;
 
+            EmitBossAura(dt);
+
             _bubbleEmit += dt * _bubbleLook.Fx.Rate * _density;
             while (_bubbleEmit >= 1f)
             {
@@ -85,6 +87,50 @@ namespace BubbleRise
                 _guardianEmit -= 1f;
                 EmitTrail(_guardian.Center, _guardian.Radius, _guardianLook);
             }
+        }
+
+        float _bubbleAuraEmit, _guardianAuraEmit;
+
+        /// <summary>
+        /// Фирменная аура боссового скина: редкие частицы у кромки — разряды медузы,
+        /// клубы чернил морока, пузырьки акулы. Не больше <see cref="BossFx.MaxAuraRate"/>
+        /// в секунду, у стража вдвое реже; «Тихо» и «Меньше эффектов» режут плотность.
+        /// Ровное свечение (SetAura) остаётся как было — это база, его видно всегда.
+        /// </summary>
+        void EmitBossAura(float dt)
+        {
+            if (_fx == null) return;
+            float k = Visuals.Particles * _density;
+            if (_bubbleLook.IsBoss && _bubble != null)
+            {
+                _bubbleAuraEmit += dt * Mathf.Min(_bubbleLook.BossDef.AuraRate, BossFx.MaxAuraRate) * k;
+                while (_bubbleAuraEmit >= 1f)
+                {
+                    _bubbleAuraEmit -= 1f;
+                    EmitBossSpec(BossFx.Aura(_bubbleLook.BossDef), _bubble.Center, _bubble.Radius, inRadii: true);
+                }
+            }
+            if (_guardianLook.IsBoss && _guardian != null)
+            {
+                _guardianAuraEmit += dt * Mathf.Min(_guardianLook.BossDef.AuraRate, BossFx.MaxAuraRate) * 0.5f * k;
+                while (_guardianAuraEmit >= 1f)
+                {
+                    _guardianAuraEmit -= 1f;
+                    EmitBossSpec(BossFx.Aura(_guardianLook.BossDef), _guardian.Center, _guardian.Radius, inRadii: true);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Фирменная частица в мир. Смещение — в радиусах тела (аура, след) или в
+        /// юнитах (удар, разрушение); скорость и размер — за размером игрока.
+        /// </summary>
+        void EmitBossSpec(FxSpec t, Vector2 at, float radius, bool inRadii, bool burst = false)
+        {
+            if (burst) t.Alpha *= BossFx.BurstAlpha;
+            Vector2 pos = at + (inRadii ? t.Offset * radius : t.Offset * PlayerSize.Scale);
+            _fx.EmitShape(pos, t.Velocity * PlayerSize.Scale, t.Color, t.Life, t.Size * PlayerSize.Scale,
+                          t.Shape, t.Angle, t.Spin, t.Stretch, t.FadeIn, t.Gravity, t.Drag, t.Alpha);
         }
 
         /// <summary>
@@ -124,6 +170,11 @@ namespace BubbleRise
         /// </summary>
         public static float AuraIntensity(SkinLook look, float t)
         {
+            // Трофей — мини-босс, а не шар: круглый ореол под ним читался бы диском
+            // вокруг силуэта. Свечение у мини-босса только своё — тусклые глаза и
+            // разряды в самом рисунке.
+            if (look.IsBoss) return 0f;
+
             float intensity;
             switch (look.Material.AuraStyle)
             {
@@ -264,6 +315,10 @@ namespace BubbleRise
             /// <summary>Размер в мировых единицах.</summary>
             public float Size;
             public float Alpha;
+
+            /// <summary>Фирменный след боссового скина: форма, поворот, вытянутость и прочее.</summary>
+            public bool Boss;
+            public FxSpec Spec;
         }
 
         /// <summary>
@@ -279,6 +334,18 @@ namespace BubbleRise
         /// </summary>
         public static TrailSpec SampleTrail(SkinLook look, float phase)
         {
+            // У трофеев с боссов — фирменный след: нити разрядов, чернильный шлейф,
+            // ленты воды. Та же функция для игры и витрины.
+            if (look.IsBoss)
+            {
+                var b = BossFx.Trail(look.BossDef, phase);
+                return new TrailSpec
+                {
+                    Offset = b.Offset, Velocity = b.Velocity, Color = b.Color, Life = b.Life,
+                    Size = b.Size, Alpha = b.Alpha, Boss = true, Spec = b,
+                };
+            }
+
             SkinFxDef fx = look.Fx;
             Color c = Random.value < 0.5f ? fx.PrimaryOr(look.Tint) : fx.SecondaryOr(look.Tint);
 
@@ -352,6 +419,11 @@ namespace BubbleRise
             if (_fx == null) return;
 
             TrailSpec t = SampleTrail(look, _phase);
+            if (t.Boss)
+            {
+                EmitBossSpec(t.Spec, center, radius, inRadii: true);
+                return;
+            }
 
             // Размер следа идёт за размером шарика. Без этого множителя игрока
             // (0.8) след остался прежним и смотрелся крупнее уменьшенного тела.
@@ -381,6 +453,16 @@ namespace BubbleRise
                 PlayFinisher(_bubbleLook.Fx.Finisher, at,
                              _bubbleLook.Fx.PrimaryOr(_bubbleLook.Tint),
                              _bubbleLook.Fx.SecondaryOr(_bubbleLook.Tint));
+                _fx.SetDensity(1f);
+                return;
+            }
+
+            // Трофей с босса — фирменная атака босса целиком: молнии медузы,
+            // чернильное облако морока, россыпь зубов. Богаче формой, а не яркостью.
+            if (_bubbleLook.IsBoss)
+            {
+                BossFx.Break(_bubbleLook.BossDef, Mathf.RoundToInt(BossFx.MaxBreak * Visuals.Particles), _bossSpecs);
+                for (int i = 0; i < _bossSpecs.Count; i++) EmitBossSpec(_bossSpecs[i], at, 0f, inRadii: false, burst: true);
                 _fx.SetDensity(1f);
                 return;
             }
@@ -665,9 +747,18 @@ namespace BubbleRise
         /// </summary>
         void PlayImpact(MaterialFxDef m, Vector2 at, Vector2 n)
         {
+            // Трофей с босса бьёт фирменной атакой в том же бюджете частиц.
+            if (_guardianLook.IsBoss)
+            {
+                BossFx.Strike(_guardianLook.BossDef, n, Mathf.Min(ImpactBudget(), BossFx.MaxStrike), _bossSpecs);
+                for (int i = 0; i < _bossSpecs.Count; i++) EmitBossSpec(_bossSpecs[i], at, 0f, inRadii: false, burst: true);
+                return;
+            }
             Vector2 tangent = new Vector2(-n.y, n.x);
             PlayImpactParticles(m, at, n, tangent, ImpactBudget());
         }
+
+        readonly System.Collections.Generic.List<FxSpec> _bossSpecs = new System.Collections.Generic.List<FxSpec>();
 
         /// <summary>
         /// Сколько частиц на один удар — всего, со всеми подслоями.

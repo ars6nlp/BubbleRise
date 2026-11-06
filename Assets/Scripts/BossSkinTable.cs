@@ -2,158 +2,114 @@ using UnityEngine;
 
 namespace BubbleRise
 {
-    /// <summary>
-    /// Какой фактурой покрыт трофейный скин. По одной на босса, повторов нет —
-    /// иначе два трофея читались бы как перекрашенная копия.
-    /// </summary>
-    public enum BossMotif
-    {
-        /// <summary>Жилки: ветвистые нити, просвечивающие изнутри. Медуза.</summary>
-        Veins,
-        /// <summary>Чешуя: ряды налегающих друг на друга дуг. Змей.</summary>
-        Scales,
-        /// <summary>Присоски: два ряда кружков вдоль рук. Осьминог.</summary>
-        Suckers,
-        /// <summary>Грани: длинные стальные блики вдоль формы. Рыба-меч.</summary>
-        Blades,
-        /// <summary>Трещины хитина: ломаные линии между пластинами. Краб.</summary>
-        Cracks,
-        /// <summary>Знаки: мелкие руны, проступающие в черноте. Чернильник.</summary>
-        Runes,
-        /// <summary>Зубы: ряд острых треугольников. Пиранья.</summary>
-        Teeth,
-        /// <summary>Пластины: шестиугольные соты панциря. Черепаха.</summary>
-        Plates,
-        /// <summary>Плакоидные шевроны: мелкая жёсткая насечка. Акула.</summary>
-        Chevrons,
-        /// <summary>Пятна: крупные тёмные отметины по спине. Скат.</summary>
-        Spots,
-    }
+    /// <summary>Что изредка отделяется от мини-босса — тихо, по одной частице.</summary>
+    public enum BossAura { Arcs, Thorns, Suckers, ColdStreaks, Sand, InkPuffs, RedSparks, Shells, Bubbles, RedDots }
+
+    /// <summary>Что тянется следом.</summary>
+    public enum BossTrail { Threads, BoneDust, InkDrops, Streaks, ShellSparks, InkPlume, RedBubbles, SandShells, WaterRibbons, ShadowWaves }
+
+    /// <summary>Удар стража — уменьшенная атака босса.</summary>
+    public enum BossStrike { Arc, Coil, Grip, Slash, Pincer, Splash, Nibble, Crack, Jaws, Wave }
+
+    /// <summary>Разрушение препятствия — то же, только целиком.</summary>
+    public enum BossBreak { Storm, Spiral, Tentacles, Cross, Shards, InkCloud, TeethScatter, PlateRing, Whirl, Ripples }
 
     /// <summary>
-    /// Паспорт трофейного скина: палитра, фактура и характер внутреннего течения.
+    /// Паспорт боссового скина: тона босса для витрины и темы эффектов.
     ///
-    /// **Зачем он появился.** Раньше трофеи рисовались двадцатью отдельными
-    /// функциями, и всё, что в них было общего — силуэт босса, — повторялось
-    /// руками. Ни каймы, ни тени, ни обводки, ни начинки у них не было вовсе:
-    /// <see cref="SkinDef.Trophy"/> оставляет <c>Material = Glass</c>, а
-    /// <c>MaterialCore(Glass)</c> возвращает null, поэтому все десять трофеев
-    /// имели ровно один слой — плоский силуэт. [КОД]
+    /// Сам рисунок — мини-босс — живёт в <see cref="SpriteFactory.MiniBoss"/>, его
+    /// живость — в <see cref="MiniBossRigs"/>. Здесь только то, что нужно вокруг
+    /// рисунка: в каком тоне рамка карточки, нужна ли тёмному скину светлая
+    /// обводка, чем пылит след и как выглядят удар и разрушение.
     ///
-    /// Теперь общие слои — кайма, фактура, блик, тень, обводка и начинка —
-    /// накладываются одной функцией по данным отсюда, а силуэт остаётся своим.
-    /// Новому боссу достаточно одной строки в <see cref="All"/>.
+    /// Все цвета — реальные тона босса, приглушённые: без белого и без насыщенных
+    /// «электрических» оттенков (проверяет BossSkinTests).
     /// </summary>
     public struct BossSkinDef
     {
-        /// <summary>Основной тон тела. Из палитры самого босса, не придуманный.</summary>
-        public Color Body;
-        /// <summary>Глубокая тень тела и цвет обводки.</summary>
+        /// <summary>Главный тон босса, приглушённый: рамка и подложка карточки, подпись.</summary>
+        public Color Tone;
+        /// <summary>Самый тёмный тон босса.</summary>
         public Color Deep;
-        /// <summary>Контурная кайма: цвет, которым босс читается издалека.</summary>
-        public Color Rim;
-        /// <summary>Акцент фактуры: чешуи, присосок, зубов, рун.</summary>
-        public Color Accent;
-        /// <summary>Свечение начинки — то, что медленно течёт внутри.</summary>
-        public Color Glow;
-
-        public BossMotif Motif;
-
-        /// <summary>Как часто ложится фактура. Больше — мельче рисунок.</summary>
-        public float MotifScale;
-        /// <summary>Сила фактуры, 0…1. Выше 0.3 начинается шум, а не деталь.</summary>
-        public float MotifStrength;
-
         /// <summary>
-        /// Насколько просвечивает середина тела, чтобы была видна начинка.
-        /// 1 — полностью непрозрачная, начинки не видно вовсе.
+        /// Светлая обводка вокруг силуэта — только у тёмных скинов, которым иначе не
+        /// хватает контраста с водой. Прозрачная — обводки нет.
         /// </summary>
-        public float CoreShow;
+        public Color Outline;
 
-        /// <summary>Сколько рукавов у внутреннего течения.</summary>
-        public int CoreArms;
-        /// <summary>Закрутка течения. Больше — круче спираль.</summary>
-        public float CoreTwist;
+        public BossAura Aura;
+        /// <summary>Частиц ауры в секунду у пузырька (у стража — половина).</summary>
+        public float AuraRate;
+        public BossTrail Trail;
+        public BossStrike Strike;
+        public BossBreak Break;
+        /// <summary>Два цвета эффектов — из палитры босса, приглушённые.</summary>
+        public Color FxA, FxB;
+        /// <summary>Ключ подписи «Мини-версия …».</summary>
+        public string SignatureKey;
     }
 
-    /// <summary>
-    /// Десять трофеев — по одному на босса.
-    ///
-    /// **Палитра берётся у самого босса**, а не подбирается заново: трофей обязан
-    /// опознаваться как его уменьшенная копия. Цвета — те же константы
-    /// <see cref="Palette"/>, которыми нарисован сам босс.
-    ///
-    /// **Пара «пузырёк + страж» делит палитру и фактуру**, а различается формой и
-    /// ролью: пузырёк — сам зверь, страж — его оружие или часть.
-    /// </summary>
     public static class BossSkinTable
     {
-        static BossSkinDef D(Color body, Color deep, Color rim, Color accent, Color glow,
-                             BossMotif motif, float motifScale, float motifStrength,
-                             float coreShow, int coreArms, float coreTwist)
+        /// <summary>
+        /// Обводка тёмных скинов: чуть светлее самой тёмной воды — не ярче 1.5:1 к ней,
+        /// это отделение силуэта, а не кайма.
+        /// </summary>
+        public static readonly Color DarkOutline = Palette.Hex("2C3440", 0.85f);
+
+        static BossSkinDef D(string tone, string deep, bool outline,
+                             BossAura aura, float auraRate, BossTrail trail, BossStrike strike, BossBreak brk,
+                             string fxA, string fxB, string signature)
             => new BossSkinDef
             {
-                Body = body, Deep = deep, Rim = rim, Accent = accent, Glow = glow,
-                Motif = motif, MotifScale = motifScale, MotifStrength = motifStrength,
-                CoreShow = coreShow, CoreArms = coreArms, CoreTwist = coreTwist,
+                Tone = Palette.Hex(tone), Deep = Palette.Hex(deep),
+                Outline = outline ? DarkOutline : Color.clear,
+                Aura = aura, AuraRate = Mathf.Min(auraRate, 2f),
+                Trail = trail, Strike = strike, Break = brk,
+                FxA = Palette.SafeLight(Palette.Hex(fxA), 2f), FxB = Palette.SafeLight(Palette.Hex(fxB), 2f),
+                SignatureKey = signature,
             };
 
-        /// <summary>Порядок строго как в <see cref="BossKind"/>.</summary>
+        /// <summary>Порядок строго как в <see cref="BossKind"/>. Тона — из палитры самих боссов.</summary>
         public static readonly BossSkinDef[] All =
         {
-            // Jelly — грозовая медуза: фиолетовый купол, холодные разряды.
-            D(Palette.StormBell, Palette.StormDeep, Palette.StormSpark,
-              Palette.Hex("9FD8FF"), Palette.Hex("5FC8E8"),
-              BossMotif.Veins, 6.5f, 0.2f, 0.68f, 3, 1.6f),
-
-            // Serpent — глубинный змей: сине-зелёное тело, рыжий гребень.
-            D(Palette.SerpentBody, Palette.Hex("12222B"), Palette.SerpentSpine,
-              Palette.SerpentBelly, Palette.Hex("3E6E7C"),
-              BossMotif.Scales, 9f, 0.16f, 0.74f, 2, 1.1f),
-
-            // Octopus — осьминог: пурпур и розовые присоски.
-            D(Palette.OctopusBody, Palette.OctopusDark, Palette.OctopusSucker,
-              Palette.OctopusEye, Palette.Hex("8A3F96"),
-              BossMotif.Suckers, 4f, 0.2f, 0.70f, 4, 1.9f),
-
-            // Swordfish — рыба-меч: сталь и холодный блик.
-            D(Palette.SwordBack, Palette.Hex("0B1824"), Palette.SwordBlade,
-              Palette.SwordBelly, Palette.Hex("5F7E96"),
-              BossMotif.Blades, 3f, 0.16f, 0.76f, 2, 0.7f),
-
-            // Crab — краб: рыжий хитин, тёмные швы.
-            D(Palette.CrabShell, Palette.CrabJoint, Palette.CrabHilite,
-              Palette.CrabShellDk, Palette.Hex("D2603A"),
-              BossMotif.Cracks, 3.5f, 0.18f, 0.74f, 3, 0.9f),
-
-            // Ink — чернильник: почти чёрное тело и лиловые знаки.
-            D(Palette.InkMantle, Palette.InkBody, Palette.InkGlow,
-              Palette.InkSucker, Palette.Hex("6A3FB0"),
-              BossMotif.Runes, 3.2f, 0.22f, 0.66f, 5, 2.3f),
-
-            // Piranha — стая: серое тело, рыжее брюхо, белые зубы.
-            D(Palette.PiranhaSwarmBody, Palette.PiranhaSwarmFin, Palette.PiranhaSwarmBelly,
-              Palette.PiranhaSwarmTooth, Palette.Hex("A8503A"),
-              BossMotif.Teeth, 7f, 0.18f, 0.74f, 3, 1.3f),
-
-            // Turtle — черепаха: оливковый панцирь, соты пластин.
-            D(Palette.TurtleShell, Palette.TurtleShellDark, Palette.TurtleEye,
-              Palette.TurtleSkin, Palette.Hex("6E8F48"),
-              BossMotif.Plates, 2.8f, 0.2f, 0.76f, 2, 0.6f),
-
-            // Shark — акула: свинцовая спина, светлое брюхо.
-            D(Palette.SharkBody, Palette.SharkBack, Palette.SharkBelly,
-              Palette.SharkGill, Palette.Hex("5A727E"),
-              BossMotif.Chevrons, 11f, 0.14f, 0.76f, 2, 0.8f),
-
-            // Manta — великая тень: почти чёрное крыло, бирюзовая жабра.
-            D(Palette.MantaSpot, Palette.MantaBack, Palette.MantaGlow,
-              Palette.MantaEdge, Palette.Hex("2E7A74"),
-              BossMotif.Spots, 2.2f, 0.22f, 0.70f, 3, 1.4f),
+            // Медуза: тёмный купол 463A72→120C26, кромка 8E7FC0, тусклая бирюза 3FD8C8 — только в дугах
+            D("6A5A9C", "120C26", false, BossAura.Arcs, 1.2f,
+              BossTrail.Threads, BossStrike.Arc, BossBreak.Storm, "2E8C86", "6A5A9C", "sig.jelly"),
+            // Змей: тело 26404E, брюхо 4E7A88, костяные шипы 948A76
+            D("4E7A88", "1A2E38", false, BossAura.Thorns, 1f,
+              BossTrail.BoneDust, BossStrike.Coil, BossBreak.Spiral, "8E8676", "3E6A72", "sig.serpent"),
+            // Спрут: 5B2E63 / 38193F, присоски E8A9C8 приглушённые
+            D("7A4A84", "38193F", false, BossAura.Suckers, 1f,
+              BossTrail.InkDrops, BossStrike.Grip, BossBreak.Tentacles, "9C6A88", "6A3A72", "sig.octopus"),
+            // Рыба-меч: спина 172B3C, брюхо 8299AC, клинок — сталь
+            D("6E8699", "172B3C", false, BossAura.ColdStreaks, 1f,
+              BossTrail.Streaks, BossStrike.Slash, BossBreak.Cross, "7A8C9A", "4A6070", "sig.swordfish"),
+            // Краб: панцирь B4432A приглушённый, суставы 5C1E12, песок
+            D("A84A32", "5C1E12", false, BossAura.Sand, 1.2f,
+              BossTrail.ShellSparks, BossStrike.Pincer, BossBreak.Shards, "A08C6A", "8C4A34", "sig.crab"),
+            // Морок: мантия 8957CE→67429E приглушённая, чернила 0A0710
+            D("7550AA", "24123C", false, BossAura.InkPuffs, 1f,
+              BossTrail.InkPlume, BossStrike.Splash, BossBreak.InkCloud, "2A1E3C", "5E4A8A", "sig.ink"),
+            // Пиранья: тело 7C8D96, спина 35434D, брюхо C4451C приглушённое
+            D("8E5A48", "35434D", false, BossAura.RedSparks, 1f,
+              BossTrail.RedBubbles, BossStrike.Nibble, BossBreak.TeethScatter, "8C3E30", "6E7C84", "sig.piranhas"),
+            // Черепаха: панцирь 5E7F3E / 374E26, камень 7D8B93
+            D("5E7F3E", "374E26", false, BossAura.Shells, 1f,
+              BossTrail.SandShells, BossStrike.Crack, BossBreak.PlateRing, "8E8A6A", "5E7A44", "sig.turtles"),
+            // Акула: спина 222E38, тело 4E6069, брюхо — светло-серое, не белое
+            D("6A7C86", "222E38", true, BossAura.Bubbles, 1.2f,
+              BossTrail.WaterRibbons, BossStrike.Jaws, BossBreak.Whirl, "6E8A9A", "8A969C", "sig.shark"),
+            // Скат: почти чёрная спина 04070B, холодная кромка 22454F, тусклые красные глаза
+            D("2E5664", "0E161C", true, BossAura.RedDots, 0.8f,
+              BossTrail.ShadowWaves, BossStrike.Wave, BossBreak.Ripples, "2E5664", "8A3A30", "sig.manta"),
         };
 
         public static BossSkinDef Of(BossKind boss)
             => All[Mathf.Clamp((int)boss, 0, All.Length - 1)];
+
+        /// <summary>Подпись скина одной строкой — для витрины.</summary>
+        public static string Signature(BossKind boss) => Loc.Get(Of(boss).SignatureKey);
 
         /// <summary>
         /// Босс по рисунку скина. Рисунок и босс — одно и то же, но хранятся в

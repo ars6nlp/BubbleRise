@@ -11,7 +11,10 @@ namespace BubbleRise
     /// </summary>
     public struct SkinLook
     {
-        /// <summary>Оболочка: силуэт стихии или рисунок босса.</summary>
+        /// <summary>
+        /// Оболочка: силуэт стихии. У трофея — неподвижный кадр мини-босса (справочник,
+        /// запасной показ); живой мини-босс рисуется сеткой по <see cref="MiniBoss"/>.
+        /// </summary>
         public Sprite Shell;
         /// <summary>Начинка: материал, который течёт под стеклом. null у стекла.</summary>
         public Sprite Core;
@@ -27,6 +30,18 @@ namespace BubbleRise
 
         public Rarity Rarity;
 
+        /// <summary>
+        /// Трофей с босса: вместо оболочки — живой мини-босс (<see cref="MiniBossView"/>,
+        /// <see cref="MiniBossGraphic"/>), эффекты — в теме босса (<see cref="BossFx"/>).
+        /// </summary>
+        public bool IsBoss;
+        /// <summary>Какой мини-босс рисовать. Смысл имеет только при <see cref="IsBoss"/>.</summary>
+        public MiniBossKey MiniBoss;
+        /// <summary>Чей трофей. Смысл имеет только при <see cref="IsBoss"/>.</summary>
+        public BossKind Boss;
+        /// <summary>Паспорт боссового скина — всё о нём в одной строке <see cref="BossSkinTable"/>.</summary>
+        public BossSkinDef BossDef => BossSkinTable.Of(Boss);
+
         /// <summary>Множитель размера рисунка от стихии. ±10 %, хитбокса не касается.</summary>
         public float VisualScale => Archetype.VisualScale;
 
@@ -34,7 +49,7 @@ namespace BubbleRise
         /// Цвет оболочки. Под начинкой стекло не красится: цвет уже положен
         /// материалом, и второй слой краски глушит сам материал.
         /// </summary>
-        public Color ShellColor => Core != null ? Color.white : Tint;
+        public Color ShellColor => IsBoss ? Color.white : Core != null ? Color.white : Tint;
     }
 
     /// <summary>
@@ -80,24 +95,25 @@ namespace BubbleRise
         {
             // У трофейных скинов материала нет — у них свой рисунок самого босса,
             // поэтому аура, удар и разрушение берутся по боссу, а не по стеклу.
-            MaterialFxDef material = skin.Kind == UnlockKind.Boss
+            bool boss = skin.Kind == UnlockKind.Boss;
+            MaterialFxDef material = boss
                 ? MaterialFxTable.OfBoss(skin.UnlockBoss)
                 : MaterialFxTable.Of(skin.Material);
 
             return new SkinLook
             {
                 Shell = guardian ? SpriteFactory.GuardianShell(skin) : SpriteFactory.BubbleShell(skin),
-                // У трофеев материал остаётся стеклом (см. SkinDef.Trophy), а у
-                // стекла начинки нет — поэтому все десять трофеев были ровно
-                // одним плоским слоем. Начинку им даёт таблица боссов.
-                Core = skin.Kind == UnlockKind.Boss
-                    ? SpriteFactory.BossCore(skin.UnlockBoss)
-                    : SpriteFactory.MaterialCore(skin.Material),
+                // Трофей — мини-босс целиком: у него нет стекла и начинки под ним,
+                // весь вид — рисунок босса (SpriteFactory.MiniBoss).
+                Core = boss ? null : SpriteFactory.MaterialCore(skin.Material),
                 Tint = skin.Tint,
                 Fx = SkinFxTable.Of(index),
                 Material = material,
                 Archetype = ArchetypeTable.Of(material.Status),
                 Rarity = skin.Rarity,
+                IsBoss = boss,
+                Boss = skin.UnlockBoss,
+                MiniBoss = new MiniBossKey(skin.UnlockBoss, guardian),
             };
         }
 
